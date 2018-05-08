@@ -1,0 +1,58 @@
+\usepackage{xkeyval}
+\usepackage{todonotes}
+\presetkeys{todonotes}{inline}{}
+\usepackage{graphicx}
+\usepackage{subfig}
+\usepackage{multimedia}                % include movies
+\usepackage{breqn}                     % break equations automatically
+\usepackage{cancel}                    % cancel out text/equations
+\usepackage{color}                     % colored font
+\usepackage{wasysym}                   % smiley (smiling face)
+\usepackage[absolute,overlay]{textpos} % to put a box in front of text
+\usepackage{mathtools}                 % use dcases to display nice fractions in cases
+\usepackage{multicol}                  % split tof
+\usepackage[figurename=Fig]{caption}
+\usepackage{tcolorbox}
+\usepackage{calc}
+\usepackage{multirow}
+\usepackage{dcolumn}
+\usepackage{adjustbox}
+
+\usepackage{hyperref}
+\hypersetup{
+	pdftitle   = {Brown bag seminar},
+	pdfauthor  = {Pablo Botas},
+	pdfcreator = {Pablo Botas},
+	colorlinks = true,
+	linkcolor  = cyan,
+	linktoc    = black,
+	citecolor  = black,
+	filecolor  = black,
+	urlcolor   = black,
+	baseurl={}
+}
+
+\setlength\abovecaptionskip{0pt}
+
+\usepackage{pgfpages}
+% \setbeameroption{show notes on second screen}
+\beamertemplatenavigationsymbolsempty
+\setbeamertemplate{footline}[frame number]
+
+\newcommand\blfootnote[1]{%
+	\begingroup
+	\renewcommand\thefootnote{}\footnote{#1}%
+	\addtocounter{footnote}{-1}%
+	\endgroup
+}
+
+% SEE http://latexcolor.com/
+\definecolor{flame}{rgb}{0.89, 0.35, 0.13}
+\definecolor{iceberg}{rgb}{0.44, 0.65, 0.82}
+\definecolor{inchworm}{rgb}{0.7, 0.93, 0.36}
+\definecolor{brandeisblue}{rgb}{0.0, 0.44, 1.0}
+
+\AtBeginDocument{\setlength\abovedisplayskip{0pt}}
+\AtBeginDocument{\setlength\belowdisplayskip{10pt}}
+\AtBeginDocument{\setlength\abovedisplayshortskip{0pt}}
+\AtBeginDocument{\setlength\belowdisplayshortskip{0pt}}

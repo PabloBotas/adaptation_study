@@ -1,0 +1,39 @@
+## OTHER STUDIES
+CBCT_MC_validation/
+uncertainty_study/
+pristine_peaks\.zip
+
+## PLANS FILES
+plans/astroid_data/
+plans/Opt4D/CERR_to_data/
+plans/Opt4D/P*/
+
+## PATIENTS FILES
+patients/Jihun_database
+patients/P*
+patients/reports/
+
+## RESULTS FILES
+results/report/
+results/data/dvh \(copy\)/
+results/data/logs/
+results/analysis/adapted_AAPM/
+results/analysis/adapted_geo_reopt/
+results/analysis/plots_adapted/
+results/analysis/plots_plans/
+results/PTCOG_submission/
+results/AAPM_plan_eval_abstract/
+
+## LATEX FILES
+*.toc
+*.gz
+*.aux
+*.backup
+main\.log
+main\.nav
+main\.out
+main\.snm
+main\.vrb
+
+## R FILES
+.Rhistory

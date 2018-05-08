@@ -1,0 +1,22 @@
+# First not commented and non empty line must be GPUID
+
+GPUID 0
+RandomSeed 0 # (integer, use 0 if use current time)
+
+PatientDir PATIENTDIR
+
+## Quantity to score
+Scorer dose
+SupressStd 1
+
+SourceType FluenceMap
+SimulationType perBeam
+
+MCAUTOAstroid 1
+SpotFactor SPOTFACTOR
+Machine TopasMediumSpots
+CTvolume CTVOLUME_FILE
+ScoreToCTGrid 1
+
+## Output path
+OutputFilePrefix PATIENTDIR/OUTPUT

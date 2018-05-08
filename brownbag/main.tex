@@ -1,0 +1,71 @@
+\documentclass[pdf,dvipsnames]{beamer}
+% \usetheme{Antibes}
+\usetheme{Frankfurt}
+
+\input{header.tex}
+
+\begin{document}
+\title{Online adaptation of IMPT plans with GPU-MC dose calculation on CBCTs for head and neck}
+\subtitle{Brown bag seminar}
+\institute{Massachusetts General Hospital and Heidelberg University}
+\titlegraphic{
+	\includegraphics[height=2cm]{imgs/MGHHMSLogo.pdf} \hspace*{2cm} ~%
+	\includegraphics[height=2cm]{imgs/Logo_University_of_Heidelberg.pdf}
+}
+\date{May 1, 2017}
+\begin{frame}
+    \titlepage
+    \note{I am going to present a study that we recently finished of what can be done to limit the plan degradation for mobile lung cancer tumors. However, I'll to start with the subtitle, I know of some people in the department interested in implementing this tool in the clinical routines so I am going to introduce how it works and what steps are followed. I will keep this as brief as possible because it's not necessarily translatable to the clinic.}
+\end{frame}
+
+\begin{frame}{General outline}
+    \begin{multicols}{2}
+        \tableofcontents[sectionstyle=show,
+                         subsectionstyle=show/show,
+                         subsubsectionstyle=show/show,
+                         subsubsectionstyle=show/show/show]
+    \end{multicols}
+\end{frame}
+
+%\begin{frame}{Comments given after the talk}
+%    \begin{multicols}{2}
+%        \todo{Since you are overwritting the density and MC is more sensitive to it, would this create worse plans? This is a tricky issue.}
+%        \todo{You have shown that WEPL is superior for these cases. Wouldn't the others be more robust?}
+%    \end{multicols}
+%\end{frame}
+
+\input{01_introduction.tex}
+
+\begin{frame}{General outline}
+	\begin{multicols}{2}
+		\tableofcontents[sectionstyle=show,
+		subsectionstyle=show/show,
+		subsubsectionstyle=show/show,
+		subsubsectionstyle=show/show/show]
+	\end{multicols}
+\end{frame}
+
+\input{02_methods.tex}
+
+\begin{frame}{General outline}
+	\begin{multicols}{2}
+		\tableofcontents[sectionstyle=show,
+		subsectionstyle=show/show,
+		subsubsectionstyle=show/show,
+		subsubsectionstyle=show/show/show]
+	\end{multicols}
+\end{frame}
+
+\input{03_results.tex}
+
+\input{04_conclusions.tex}
+
+\begin{frame}[plain]
+    \begin{figure}[h]
+        \includegraphics[width=0.7\textwidth]{imgs/thanks.png}
+    \end{figure}
+\end{frame}
+
+% \input{05_backup.tex}
+
+\end{document}
