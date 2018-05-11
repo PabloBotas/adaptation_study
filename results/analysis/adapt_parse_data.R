@@ -8,6 +8,8 @@ organize_structures <- function(dt)
                         esophagus         = 'Esophagus',
                         spinalcord        = 'Spinal Cord',
                         cord              = 'Spinal Cord',
+                        cochlea_r         = 'R. Cochlea',
+                        cochlea_l         = 'L. Cochlea',
                         trachea           = 'Trachea',
                         parotid_l         = 'L. Parotid',
                         parotid_r         = 'R. Parotid',
@@ -26,6 +28,7 @@ organize_structures <- function(dt)
                       P04 = c('R. Parotid', 'Larynx', 'Mandible', 'Oral cavity'),
                       P05 = c('Larynx', 'R. Submandible gland', 'L. Submandible gland'),
                       P07 = c('Mandible'),
+                      P10 = c('Larynx', 'Esophagus constrictors'),
                       P14 = c('Mandible', 'R. Submandible gland'),
                       P15 = c('Larynx'),
                       P16 = c('R. Submandible gland', 'Oral cavity'))
@@ -149,7 +152,7 @@ filter_structures <- function(dt, patient)
     return(dt)
 }
 
-process_single_file <- function(file_name, location, fractions, pat_no)
+process_single_file <- function(file_name, location, scans, pat_no)
 {
     print(file_name)
     # Parse file name
@@ -172,7 +175,7 @@ process_single_file <- function(file_name, location, fractions, pat_no)
         mutate(dose = dose/plan_fractions, vol = vol*100) %>%
         mutate(dose_pct = 100*dose/target_dose) %>%
         mutate(oar = ifelse(struct %in% c('gtv','ctv', 'GTV', 'CTV'), FALSE, TRUE)) %>%
-        mutate(fractions = fractions) %>%
+        mutate(scans = scans) %>%
         mutate(patient = as.factor(patient)) %>%
         mutate(patient.no = pat_no) %>%
         mutate(case = case) %>%
@@ -182,21 +185,28 @@ process_single_file <- function(file_name, location, fractions, pat_no)
         mutate(struct = as.factor(struct)) %>%
         ## Timing information
         mutate(case = as.character(case)) %>%
-        mutate(week.no = ifelse(case == 'Plan', 0, as.numeric(gsub("\\D", "", case)))) %>%
+        mutate(week.no = ifelse(case == 'Plan', 0,
+                                ifelse(grepl('cumulative', case), 99, as.numeric(gsub("\\D", "", case))))) %>%
         mutate(pat.week = paste0(patient, '.', week.no)) %>%
-        mutate(week.name = ifelse(week.no == 0, 'Plan', paste('Week', week.no))) %>%
+        mutate(week.name = ifelse(week.no == 0, 'Plan',
+                                  ifelse(week.no == 99, 'Cum.', paste('Week', week.no)))) %>%
         mutate(week.name = as.factor(week.name)) %>%
         mutate(checkpoints = ifelse(week.no == 0, 'Plan',
-                                    ifelse(week.no == fractions, 'Last',
-                                           ifelse(week.no == fractions %/% 2, 'Mid', 'Other')))) %>%
-        mutate(checkpoints = as.factor(checkpoints))
-    ## Adaptation Methods
+                                    ifelse(week.no == scans, 'Last',
+                                           ifelse(week.no == scans %/% 2, 'Mid',
+                                                  ifelse(week.no == 99, 'Cum.', 'Other'))))) %>%
+        mutate(checkpoints = factor(checkpoints)) %>%
+        mutate(stage = ifelse(week.no == 0, 'Plan',
+                              ifelse(week.no == 99, 'Cum.', 'Weekly'))) %>%
+        mutate(stage = factor(stage))
+        ## Adaptation Methods
     dt <- dt %>%
         mutate(method = ifelse(str_detect(case, 'Robust'), 'Robust', case)) %>%
         mutate(method = ifelse(str_detect(case, 'Week') && !str_detect(case, 'Robust'), 'None', method)) %>%
         mutate(method = ifelse(str_detect(method, 'adapt_geometric'), 'Geometric', method)) %>%
         mutate(method = ifelse(str_detect(method, 'adapt_dij'), 'Dij', method)) %>%
         mutate(method = ifelse(str_detect(method, 'adapt_cold_spots'), 'Weights', method)) %>%
+        mutate(method = ifelse(str_detect(method, 'cumulative'), 'None', method)) %>%
         mutate(method = as.factor(method)) %>%
         ## Adaptation Methods Constraints
         mutate(constraint = ifelse(str_detect(case, '_free'), 'Free', case)) %>%
@@ -205,8 +215,7 @@ process_single_file <- function(file_name, location, fractions, pat_no)
         mutate(constraint = ifelse(str_detect(constraint, '_range_shifter_iso_shift'), 'Isocenter - Range shifter', constraint)) %>%
         mutate(constraint = ifelse(str_detect(constraint, '_iso_shift'), 'Isocenter', constraint)) %>%
         mutate(constraint = ifelse(str_detect(constraint, '_range_shifter'), 'Range shifter', constraint)) %>%
-        mutate(constraint = ifelse(str_detect(constraint, '_'), 'None', constraint)) %>%
-        mutate(constraint = ifelse(str_detect(constraint, 'Week'), 'None', constraint)) %>%
+        mutate(constraint = ifelse(str_detect(constraint, '_|Week|cumulative'), 'None', constraint)) %>%
         mutate(constraint = as.factor(constraint)) %>%
         mutate(short_const = as.character(constraint)) %>%
         mutate(short_const = ifelse(short_const == 'Isocenter', 'Iso',
@@ -234,28 +243,20 @@ readData <- function(patients, location, plan_fractions, target_dose, verbose = 
     pat_no <- 1
     for (pat in patients) {
         file.names <- dir(location, pattern = pat)
-        fractions <- max(as.numeric(sub(".*cbct_([1-9]+?)[.,_].*", "\\1", file.names[grep('cbct_', file.names)])))
+        scans <- max(as.numeric(sub(".*cbct_([1-9]+?)[.,_].*", "\\1", file.names[grep('cbct_', file.names)])))
         pat_dt <- mclapply(file.names, process_single_file, location = location,
-                           fractions = fractions, pat_no = pat_no, mc.cores = 4)
+                           scans = scans, pat_no = pat_no, mc.cores = 4)
         # pat_dt <- lapply(file.names, process_single_file, location = location,
-                         # fractions = fractions, pat_no = pat_no)
-        pat_dt <- do.call(rbind, pat_dt)
-        
-        ## Calculate cummulative doses
-        # pat_dt -> pat_dt %>%
-            
-        
-        
-        
-        pat_no <- pat_no + 1
+                         # scans = scans, pat_no = pat_no)
+        pat_dt <- rbindlist(pat_dt)
 
         if (verbose)
             print(summary(pat_dt))
-        # cohort_dt <- do.call(rbind_list, c(cohort_dt, pat_dt))
-        cohort_dt <- rbind(cohort_dt, pat_dt)
+        cohort_dt <- rbindlist(list(cohort_dt, pat_dt))
+        pat_no <- pat_no + 1
     }
 
-    ## Reorder factor levels
+    ## Reorder factor levels: method
     if ('None' %in% levels(cohort_dt$method))
         cohort_dt$method <- relevel(cohort_dt$method, 'None')
     if ('Plan' %in% levels(cohort_dt$method))
@@ -270,6 +271,12 @@ readData <- function(patients, location, plan_fractions, target_dose, verbose = 
         cohort_dt$constraint <- relevel(cohort_dt$constraint, 'Free')
     if ('Plan' %in% levels(cohort_dt$constraint))
         cohort_dt$constraint <- relevel(cohort_dt$constraint, 'Plan') # Will be the first
+    
+    ## Reorder factor levels: week.name
+    if ('Cum.' %in% levels(cohort_dt$week.name))
+        cohort_dt$week.name <- relevel(cohort_dt$week.name, 'Cum.') # Will be the second
+    if ('Plan' %in% levels(cohort_dt$week.name))
+        cohort_dt$week.name <- relevel(cohort_dt$week.name, 'Plan') # Will be the first
     
     cohort_dt <- cohort_dt %>%
         mutate(short_const)

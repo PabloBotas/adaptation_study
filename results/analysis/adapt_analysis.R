@@ -15,13 +15,13 @@ if (Sys.info()["nodename"] == "gmoc-Precision-T7600") {
     setwd('~/Desktop/gmoc/Desktop/pablo/adaptive_project/results/analysis')
 }
 
-# patients <- c('P01', 'P02', 'P03', 'P04', 'P05', 'P07', 'P10', 'P14', 'P15', 'P16')
+patients <- c('P01', 'P02', 'P03', 'P04', 'P05', 'P07', 'P10', 'P14', 'P15', 'P16')
 # patients <- c('P01', 'P02', 'P03', 'P05', 'P07', 'P14', 'P15')
-patients <- c('P05')
+# patients <- c('P05')
 data_location <- '../data/dvh'
 # plots_dir <- 'plots_adapted'
 plots_dir <- 'adapted'
-dir.create(plots_dir, recursive = TRUE)
+dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
 target_dose <- 60
 dose_fraction <- 60
 plan_fractions <- 1
@@ -42,7 +42,7 @@ dvhs <- dvhs %>%
     mutate(struct = ifelse(patient == "Patient 2",
                          plyr::mapvalues(as.character(struct), c('L. Submandible gland', 'R. Submandible gland'), c('R. Submandible gland', 'L. Submandible gland')),
                          as.character(struct)))
-summary(dvhs)
+# summary(dvhs)
 
 ### Get stats and normalize Plan dose ------------------
 source('adapt_plans_utils.R')
@@ -50,8 +50,8 @@ source('adapt_plans_utils.R')
 dvhs_back <- dvhs
 dvhs <- dvhs_back
 norm_expression <- 'V98 = 98'
-temp <- calculateStats(dvhs, dose_fraction, norm_expression)
-# temp <- calculateStats(dvhs, dose_fraction)
+# temp <- calculateStats(dvhs, dose_fraction, norm_expression)
+temp <- calculateStats(dvhs, dose_fraction)
 dt.stats <- temp$stats
 dvhs <- temp$mod_dvhs
 rm(temp)
@@ -63,8 +63,7 @@ dvhs <- dvhs %>% mutate(need_adapt = (pat.week %in% adapt_list$pat.week) | (week
 
 ### Patient DVHs --------------------------------
 for (p in levels(dvhs$patient_orig)) {
-    # p <- "P10"
-    # p <- "Patient 1"
+    # p <- "P16"
     print(paste('Creating patient', p, 'DVH'))
     plt <- ggplot(filter(dvhs, patient_orig == p, !(method %in% c('Plan', 'None', 'Robust'))),
            aes(x = dose_pct, y = vol, color = struct)) +
@@ -84,8 +83,7 @@ for (p in levels(dvhs$patient_orig)) {
         theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank()) +
         labs(x = "Dose (%)", y = "Contour volume (%)", title = paste(p, "DVH evolution"))
     print(plt)
-    ggsave(paste0(plots_dir, '/DVHs_V98_98_', p, '.pdf'), width = 50, height = 14, units = "cm")
-    # ggsave(paste0(plots_dir, '/DVHs_', p, '.pdf'), width = 50, height = 14, units = "cm")
+    ggsave(paste0(plots_dir, '/DVHs_', p, '.pdf'), width = 50, height = 14, units = "cm")
 }
 
 ## Single DVH week
@@ -595,68 +593,95 @@ for (i in 1:nrow(cases)) {
 
 
 ### Patient evolution ------------------------------
-ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c("None", "Plan")),
-       aes(x = week.name, y = mean, fill = week.name)) +
-    geom_boxplot() +
-    geom_jitter(aes(color = week.name), position = position_jitter(width = 0.1),
-                alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
-    theme(legend.position = 'none') +
-    labs(y = 'Mean dose (Gy(RBE))', x = element_blank())
-ggsave(paste0(plots_dir, '/target/plan_evolution/','plan_evolution_mean', '.pdf'), width = 13, height = 8, units = "cm")
+boxplot_evolution <- function(df, x, y, fill, d, label) {
+    ## color
+    gg_color_hue <- function(n) {
+        hues = seq(15, 375, length = n + 1)
+        hcl(h = hues, l = 65, c = 100)[1:n]
+    }
+    cols <- gg_color_hue(3)
+    if (str_detect(y, '_plan')) {
+        cols <- cols[c(1,3,1)]
+    } else {
+        cols <- cols[c(2,1,3)]
+    }
+    ## filename
+    filestr <- gsub('_plan', '_diff', y)
+    ## plot
+    p <- ggplot(data = df, aes(x = get(x), y = get(y), fill = get(fill))) +
+        geom_boxplot() +
+        geom_jitter(fill = 'gray45', position = position_jitter(width = 0.1),
+                    alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
+        scale_fill_manual('Stage', values = cols) +
+        theme(legend.position = 'none') +
+        labs(y = label, x = element_blank())
+    if (str_detect(filestr, 'diff')) {
+        p <- p + geom_hline(yintercept = 0)
+    }
+    ## save
+    ggsave(plot = p, paste0(d, '/target/plan_evolution/plan_evolution_', filestr, '.pdf'),
+           width = 13, height = 8, units = "cm")
+}
 
-ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c("None", "Plan")),
-       aes(x = week.name, y = max, fill = week.name)) +
-    geom_boxplot() +
-    geom_jitter(aes(color = week.name), position = position_jitter(width = 0.1),
-                alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
-    theme(legend.position = 'none') +
-    labs(y = 'Max dose (Gy(RBE))', x = element_blank())
-ggsave(paste0(plots_dir, '/target/plan_evolution/','plan_evolution_max', '.pdf'), width = 13, height = 8, units = "cm")
+# == mean =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'mean', 'stage', plots_dir, 'Mean dose (Gy(RBE))')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'mean_plan', 'stage', plots_dir, 'Mean dose difference (Gy(RBE))')
 
-ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c("None", "Plan")),
-       aes(x = week.name, y = min, fill = week.name)) +
-    geom_boxplot() +
-    geom_jitter(aes(color = week.name), position = position_jitter(width = 0.1),
-                alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
-    theme(legend.position = 'none') +
-    labs(y = 'Min dose (Gy(RBE))', x = element_blank())
-ggsave(paste0(plots_dir, '/target/plan_evolution/','plan_evolution_min', '.pdf'), width = 13, height = 8, units = "cm")
+# == max =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'max', 'stage', plots_dir, 'Max dose (Gy(RBE))')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'max_plan', 'stage', plots_dir, 'Max dose difference (Gy(RBE))')
 
-ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c("None", "Plan")),
-       aes(x = week.name, y = D2_D98, fill = week.name)) +
-    geom_boxplot() +
-    geom_jitter(aes(color = week.name), position = position_jitter(width = 0),
-                alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
-    theme(legend.position = 'none') +
-    labs(y = 'D2-D98 (Gy(RBE))', x = element_blank())
-ggsave(paste0(plots_dir, '/target/plan_evolution/','plan_evolution_D2_D98', '.pdf'), width = 13, height = 8, units = "cm")
+# == min =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'min', 'stage', plots_dir, 'Min dose (Gy(RBE))')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'min_plan', 'stage', plots_dir, 'Min dose difference (Gy(RBE))') 
 
-ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c("None", "Plan")),
-       aes(x = week.name, y = V95, fill = week.name)) +
-    geom_boxplot() +
-    geom_jitter(aes(color = week.name), position = position_jitter(width = 0),
-                alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
-    theme(legend.position = 'none') +
-    labs(y = 'V95 (%)', x = element_blank())
-ggsave(paste0(plots_dir, '/target/plan_evolution/','plan_evolution_V95', '.pdf'), width = 13, height = 8, units = "cm")
+# == D2_D98 =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'D2_D98', 'stage', plots_dir, 'D2-D98 (Gy(RBE))')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'D2_D98_plan', 'stage', plots_dir, 'D2-D98 difference (Gy(RBE))')
 
-ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c("None", "Plan")),
-       aes(x = week.name, y = V98, fill = week.name)) +
-    geom_boxplot() +
-    geom_jitter(aes(color = week.name), position = position_jitter(width = 0),
-                alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
-    theme(legend.position = 'none') +
-    labs(y = 'V98 (%)', x = element_blank())
-ggsave(paste0(plots_dir, '/target/plan_evolution/','plan_evolution_V98', '.pdf'), width = 13, height = 8, units = "cm")
+# == V95 =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'V95', 'stage', plots_dir, 'V95 (%)')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'V95_plan', 'stage', plots_dir, 'V95 difference (%)')
 
-ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c("None", "Plan")),
-       aes(x = week.name, y = V107, fill = week.name)) +
-    geom_boxplot() +
-    geom_jitter(aes(color = week.name), position = position_jitter(width = 0),
-                alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
-    theme(legend.position = 'none') +
-    labs(y = 'V107 (%)', x = element_blank())
-ggsave(paste0(plots_dir, '/target/plan_evolution/','plan_evolution_V107', '.pdf'), width = 13, height = 8, units = "cm")
+# == V98 =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'V98', 'stage', plots_dir, 'V98 (%)')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'V98_plan', 'stage', plots_dir, 'V98 difference (%)')
+
+# == V100 =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'V100', 'stage', plots_dir, 'V100 (%)')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'V100_plan', 'stage', plots_dir, 'V100 difference (%)')
+
+# == V102 =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'V102', 'stage', plots_dir, 'V102 (%)')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'V102_plan', 'stage', plots_dir, 'V102 difference (%)')
+
+# == V105 =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'V105', 'stage', plots_dir, 'V105 (%)')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'V105_plan', 'stage', plots_dir, 'V105 difference (%)')
+
+# == V107 =================================================== ===
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                  'week.name', 'V107', 'stage', plots_dir, 'V107 (%)')
+boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+                  'week.name', 'V107_plan', 'stage', plots_dir, 'V107 difference (%)')
 
 
 ### Method comparison: target geometric -----------------------------

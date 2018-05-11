@@ -43,8 +43,6 @@ doseAtVolume <- function(dose, vol, V, target_dose = NA)
 
 calculateStats <- function(dvhs_input, prescription, norm_expression)
 {
-    require(DescTools) # AUC
-    
     if (!missing(norm_expression) && norm_expression != '' && !is.null(norm_expression)) {
         # Parse norm expression
         norm_expression = gsub(" ", "", norm_expression)
@@ -107,7 +105,7 @@ calculateStats <- function(dvhs_input, prescription, norm_expression)
     ## Calculate stats
     dt.stats <- dvhs_input %>%
         group_by(patient, patient.no, pat.week, patient_orig, struct, main_oar, oar, week.no,
-                 week.name, case, method, constraint, short_const, scale_norm) %>%
+                 week.name, case, method, constraint, short_const, scale_norm, stage) %>%
         mutate(dose = scale_norm*dose) %>%
         summarise(min  = minDose(dose, vol),
                   max  = maxDose(dose, vol),
@@ -125,6 +123,8 @@ calculateStats <- function(dvhs_input, prescription, norm_expression)
                   V98  = volumeAtDose(dose, vol, 98, target_dose),
                   V99  = volumeAtDose(dose, vol, 99, target_dose),
                   V100 = volumeAtDose(dose, vol, 100, target_dose),
+                  V102 = volumeAtDose(dose, vol, 102, target_dose),
+                  V105 = volumeAtDose(dose, vol, 105, target_dose),
                   V107 = volumeAtDose(dose, vol, 107, target_dose),
                   V110 = volumeAtDose(dose, vol, 110, target_dose),
                   V115 = volumeAtDose(dose, vol, 115, target_dose),
@@ -132,11 +132,25 @@ calculateStats <- function(dvhs_input, prescription, norm_expression)
             ) %>%
         mutate(D5_D95 = D5 - D95, D2_D98 = D2 - D98, D1_D99 = D1 - D99,
                Dmax_Dmin = max - min) %>%
-        mutate(auc = AUC(x = c(D2, D5, D50, D95, D98), y = c(2, 5, 50, 95, 98),
+        mutate(auc = DescTools::AUC(x = c(D2, D5, D50, D95, D98), y = c(2, 5, 50, 95, 98),
                          method = "trapezoid")) %>%
         mutate(ref_auc = 98*(D2_D98)) %>%
         mutate(shape = 1 - auc/ref_auc) %>%
         ungroup()
+    
+    plan.stats <- dt.stats %>%
+        filter(week.no == 0) %>%
+        rename(PATIENT = patient, STRUCT = struct)
+    
+    temp <- dt.stats %>%
+        group_by(patient, struct) %>%
+        mutate_at(.vars = vars(min:Dmax_Dmin),
+                  .funs = funs(. - filter(plan.stats, PATIENT == patient, STRUCT == struct)$.)) %>%
+        ungroup() %>%
+        rename_at(.vars = vars(min:Dmax_Dmin),
+                  .funs = funs(paste0(., '_plan')))
+    
+    dt.stats <- bind_cols(dt.stats, select(temp, min_plan:Dmax_Dmin_plan))
     
     print(select(filter(dt.stats, struct == 'CTV' & week.no == 0),
                  patient, method, struct, scale_norm, `lhs`))
