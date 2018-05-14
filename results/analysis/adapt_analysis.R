@@ -11,8 +11,6 @@ cbPalette <- c('#1f78b4', '#a6cee3', '#b2df8a', '#33a02c', '#fb9a99', '#000000',
                '#1f78b4', '#a6cee3', '#b2df8a', '#33a02c', '#fb9a99', '#000000', '#e31a1c', '#fdbf6f', '#ff7f00', '#cab2d6', '#6a3d9a', '#b15928')
 if (Sys.info()["nodename"] == "gmoc-Precision-T7600") {
     setwd('~/Desktop/pablo/adaptive_project/results/analysis')
-} else {
-    setwd('~/Desktop/gmoc/Desktop/pablo/adaptive_project/results/analysis')
 }
 
 patients <- c('P01', 'P02', 'P03', 'P04', 'P05', 'P07', 'P10', 'P14', 'P15', 'P16')
@@ -40,8 +38,9 @@ dvhs <- readData(patients, data_location, plan_fractions, target_dose, FALSE)
 ## Flip Submandible glands for patient 2
 dvhs <- dvhs %>%
     mutate(struct = ifelse(patient == "Patient 2",
-                         plyr::mapvalues(as.character(struct), c('L. Submandible gland', 'R. Submandible gland'), c('R. Submandible gland', 'L. Submandible gland')),
-                         as.character(struct)))
+                           plyr::mapvalues(as.character(struct), c('L. Submandible gland', 'R. Submandible gland'),
+                                         c('R. Submandible gland', 'L. Submandible gland')),
+                           as.character(struct)))
 # summary(dvhs)
 
 ### Get stats and normalize Plan dose ------------------
@@ -593,7 +592,7 @@ for (i in 1:nrow(cases)) {
 
 
 ### Patient evolution ------------------------------
-boxplot_evolution <- function(df, x, y, fill, d, label) {
+weekly_evolution_box <- function(df, x, y, fill, d, label) {
     ## color
     gg_color_hue <- function(n) {
         hues = seq(15, 375, length = n + 1)
@@ -606,7 +605,7 @@ boxplot_evolution <- function(df, x, y, fill, d, label) {
         cols <- cols[c(2,1,3)]
     }
     ## filename
-    filestr <- gsub('_plan', '_diff', y)
+    filestr <- paste0(x, '_', gsub('_plan', '_diff', y))
     ## plot
     p <- ggplot(data = df, aes(x = get(x), y = get(y), fill = get(fill))) +
         geom_boxplot() +
@@ -619,68 +618,95 @@ boxplot_evolution <- function(df, x, y, fill, d, label) {
         p <- p + geom_hline(yintercept = 0)
     }
     ## save
+    print(p)
+    ggsave(plot = p, paste0(d, '/target/plan_evolution/plan_evolution_', filestr, '.pdf'),
+           width = 13, height = 8, units = "cm")
+}
+
+patient_evolution_box <- function(df, x, y, fill, d, label) {
+    ## filename
+    filestr <- paste0(x, '_', gsub('_plan', '_diff', y))
+    ## plot
+    p <- ggplot(data = df, aes(x = get(x), y = get(y), fill = get(fill))) +
+        geom_boxplot() +
+        geom_jitter(fill = 'gray45', position = position_jitter(width = 0.1),
+                    alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
+        theme(legend.position = 'none') +
+        labs(y = label, x = element_blank())
+    if (str_detect(filestr, 'diff')) {
+        p <- p + geom_hline(yintercept = 0)
+    }
+    ## save
+    print(p)
     ggsave(plot = p, paste0(d, '/target/plan_evolution/plan_evolution_', filestr, '.pdf'),
            width = 13, height = 8, units = "cm")
 }
 
 # == mean =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'mean', 'stage', plots_dir, 'Mean dose (Gy(RBE))')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'mean_plan', 'stage', plots_dir, 'Mean dose difference (Gy(RBE))')
 
+patient_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None', stage %in% c('Cum.', 'Plan')),
+                  'patient', 'mean', 'stage', plots_dir, 'Mean dose difference (Gy(RBE))')
+
+ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None'), stage %in% c('Cum.', 'Plan')),
+        aes(x = patient.no, y = V107, fill = stage)) +
+    geom_col(position = 'dodge')
+
 # == max =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'max', 'stage', plots_dir, 'Max dose (Gy(RBE))')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'max_plan', 'stage', plots_dir, 'Max dose difference (Gy(RBE))')
 
 # == min =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'min', 'stage', plots_dir, 'Min dose (Gy(RBE))')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'min_plan', 'stage', plots_dir, 'Min dose difference (Gy(RBE))') 
 
 # == D2_D98 =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'D2_D98', 'stage', plots_dir, 'D2-D98 (Gy(RBE))')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'D2_D98_plan', 'stage', plots_dir, 'D2-D98 difference (Gy(RBE))')
 
 # == V95 =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V95', 'stage', plots_dir, 'V95 (%)')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'V95_plan', 'stage', plots_dir, 'V95 difference (%)')
 
 # == V98 =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V98', 'stage', plots_dir, 'V98 (%)')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'V98_plan', 'stage', plots_dir, 'V98 difference (%)')
 
 # == V100 =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V100', 'stage', plots_dir, 'V100 (%)')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'V100_plan', 'stage', plots_dir, 'V100 difference (%)')
 
 # == V102 =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V102', 'stage', plots_dir, 'V102 (%)')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'V102_plan', 'stage', plots_dir, 'V102 difference (%)')
 
 # == V105 =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V105', 'stage', plots_dir, 'V105 (%)')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'V105_plan', 'stage', plots_dir, 'V105 difference (%)')
 
 # == V107 =================================================== ===
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V107', 'stage', plots_dir, 'V107 (%)')
-boxplot_evolution(filter(dt.stats, struct == 'CTV', method %in% 'None'),
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
                   'week.name', 'V107_plan', 'stage', plots_dir, 'V107 difference (%)')
 
 
