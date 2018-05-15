@@ -176,8 +176,8 @@ process_single_file <- function(file_name, location, scans, pat_no)
         mutate(dose_pct = 100*dose/target_dose) %>%
         mutate(oar = ifelse(struct %in% c('gtv','ctv', 'GTV', 'CTV'), FALSE, TRUE)) %>%
         mutate(scans = scans) %>%
-        mutate(patient = as.factor(patient)) %>%
-        mutate(patient.no = pat_no) %>%
+        mutate(patient = factor(patient)) %>%
+        mutate(patient.no = factor(pat_no)) %>%
         mutate(case = case) %>%
         ## Organize and map input
         organize_structures() %>%
@@ -216,18 +216,18 @@ process_single_file <- function(file_name, location, scans, pat_no)
         mutate(constraint = ifelse(str_detect(constraint, '_iso_shift'), 'Isocenter', constraint)) %>%
         mutate(constraint = ifelse(str_detect(constraint, '_range_shifter'), 'Range shifter', constraint)) %>%
         mutate(constraint = ifelse(str_detect(constraint, '_|Week|cumulative'), 'None', constraint)) %>%
-        mutate(constraint = as.factor(constraint)) %>%
+        mutate(constraint = factor(constraint)) %>%
         mutate(short_const = as.character(constraint)) %>%
         mutate(short_const = ifelse(short_const == 'Isocenter', 'Iso',
                                     ifelse(short_const == 'Range shifter', 'RS',
                                            ifelse(short_const == 'Isocenter - Range shifter', 'Iso-RS', short_const)))) %>%
-        mutate(short_const = as.factor(short_const)) %>%
+        mutate(short_const = factor(short_const)) %>%
         ## Case
         mutate(case = paste0(method,'/',constraint)) %>%
         mutate(case = as.factor(case)) %>%
         ## Other factors and vars
-        mutate(week.no = as.factor(week.no),
-               week.name = as.factor(week.name),
+        mutate(week.no = factor(week.no),
+               week.name = factor(week.name),
                patient_orig = patient) %>%
         ## To output format
         as.data.table()

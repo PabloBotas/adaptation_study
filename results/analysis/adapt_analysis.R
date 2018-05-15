@@ -592,7 +592,7 @@ for (i in 1:nrow(cases)) {
 
 
 ### Patient evolution ------------------------------
-weekly_evolution_box <- function(df, x, y, fill, d, label) {
+weekly_evolution_box0 <- function(df, x, y, fill, d, label) {
     ## color
     gg_color_hue <- function(n) {
         hues = seq(15, 375, length = n + 1)
@@ -609,8 +609,10 @@ weekly_evolution_box <- function(df, x, y, fill, d, label) {
     ## plot
     p <- ggplot(data = df, aes(x = get(x), y = get(y), fill = get(fill))) +
         geom_boxplot() +
-        geom_jitter(fill = 'gray45', position = position_jitter(width = 0.1),
-                    alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
+        # geom_point() +
+        geom_text(aes(label = patient.no), position = position_jitter(width = 0.2)) +
+        geom_jitter(aes(color = patient.no), position = position_jitter(width = 0.2),
+                    alpha = 1, stroke = 0.1) +
         scale_fill_manual('Stage', values = cols) +
         theme(legend.position = 'none') +
         labs(y = label, x = element_blank())
@@ -623,91 +625,134 @@ weekly_evolution_box <- function(df, x, y, fill, d, label) {
            width = 13, height = 8, units = "cm")
 }
 
-patient_evolution_box <- function(df, x, y, fill, d, label) {
+weekly_evolution_comp <- function(df, y, outdir, label, label_thres = NA, label_margin = -100000) {
+    df <- filter(df, struct == 'CTV', method %in% 'None')
+    
     ## filename
-    filestr <- paste0(x, '_', gsub('_plan', '_diff', y))
+    filestr <- paste0('week.name_', gsub('_plan', '_diff', y))
     ## plot
-    p <- ggplot(data = df, aes(x = get(x), y = get(y), fill = get(fill))) +
+    p <- ggplot(data = df, aes(x = week.name, y = get(y))) +
+        geom_hline(yintercept = 0, alpha = 0.6) +
         geom_boxplot() +
-        geom_jitter(fill = 'gray45', position = position_jitter(width = 0.1),
-                    alpha = 0.7, pch = 21, color = 'black', stroke = 0.1) +
-        theme(legend.position = 'none') +
+        geom_vline(xintercept = 1.5, alpha = 0.6)
+    ## If point highlight
+    if (!is.na(label_thres)) {
+        p <- p + ggrepel::geom_label_repel(data = filter(df, get(y) < label_thres),
+                                           aes(x = week.name, y = get(y), label = patient.no),
+                                           nudge_y = label_margin, box.padding = 0.15,
+                                           segment.size  = 0.3, force = 2,
+                                           segment.color = "grey50", size = 2,
+                                           arrow = arrow(length = unit(0.03, "npc"), type = "closed", ends = "first"))
+    }
+    p <- p +
+        geom_line(data = filter(df, stage == 'Weekly'),
+                  aes(x = week.name, y = get(y), group = patient.no, color = patient.no, linetype = patient.no)) +
+        geom_point(aes(fill = patient.no), pch = 21, stroke = 0.3) +
+        guides(fill = guide_legend(title = "Pat. no.", keywidth = 2),
+               linetype = guide_legend(title = "Pat. no.", keywidth = 2),
+               color = guide_legend(title = "Pat. no.", keywidth = 2)) +
+        theme(legend.position = 'right') +
         labs(y = label, x = element_blank())
+    
+    
+        
+    ## save
+    print(p)
+    for (ext in c('.pdf', '.png')) {
+        f <- paste0(outdir, '/target/plan_evolution/plan_evolution_', filestr, ext)
+        ggsave(plot = p, f, width = 15, height = 8, units = "cm", dpi = 600)
+    }
+}
+weekly_evolution_comp(dt.stats, 'min_plan', plots_dir, 'Min dose difference [Gy(RBE)]', -15) 
+
+patient_evolution_box <- function(df, y, color, d, label) {
+    df <- filter(df, struct == 'CTV', method %in% 'None', stage %in% c('Cum.', 'Weekly'))
+    ## color
+    gg_color_hue <- function(n) {
+        hues = seq(15, 375, length = n + 1)
+        hcl(h = hues, l = 65, c = 100)[1:n]
+    }
+    cols <- gg_color_hue(3)
+    cols <- cols[c(1,3,1)]
+    print(cols)
+    cols2 <- c('black', "#619CFF")
+
+    ## filename
+    filestr <- paste0('patient.no_', gsub('_plan', '_diff', y))
+    ## plot
+    p <- ggplot(data = df, aes(x = patient.no, y = get(y), color = get(color), fill = get(color))) +
+        geom_boxplot() +
+        scale_color_manual('Type', values = cols2) +
+        scale_fill_manual('Type', values = cols) +
+        labs(y = label, x = 'Patient number')
     if (str_detect(filestr, 'diff')) {
         p <- p + geom_hline(yintercept = 0)
     }
     ## save
     print(p)
     ggsave(plot = p, paste0(d, '/target/plan_evolution/plan_evolution_', filestr, '.pdf'),
-           width = 13, height = 8, units = "cm")
+           width = 13, height = 8, units = "cm", dpi = 600)
 }
 
 # == mean =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
-                  'week.name', 'mean', 'stage', plots_dir, 'Mean dose (Gy(RBE))')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'mean_plan', 'stage', plots_dir, 'Mean dose difference (Gy(RBE))')
+                  'week.name', 'mean', 'stage', plots_dir, 'Mean dose [Gy(RBE)]')
+weekly_evolution_comp(dt.stats, 'mean_plan', plots_dir, 'Mean dose difference [Gy(RBE)]', -1.75)
 
-patient_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None', stage %in% c('Cum.', 'Plan')),
-                  'patient', 'mean', 'stage', plots_dir, 'Mean dose difference (Gy(RBE))')
+patient_evolution_box(dt.stats, 'V95_plan', plots_dir, 'Mean dose difference (Gy(RBE))')
 
-ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None'), stage %in% c('Cum.', 'Plan')),
-        aes(x = patient.no, y = V107, fill = stage)) +
+ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None'), stage %in% c('Cum.')),
+        aes(x = patient.no, y = V98_plan, fill = stage)) +
     geom_col(position = 'dodge')
+
+ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None'), stage %in% c('Cum.', 'Weekly')),
+       aes(x = patient.no, y = D98_plan, color = stage)) +
+    geom_boxplot()
 
 # == max =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
-                  'week.name', 'max', 'stage', plots_dir, 'Max dose (Gy(RBE))')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'max_plan', 'stage', plots_dir, 'Max dose difference (Gy(RBE))')
+                  'week.name', 'max', 'stage', plots_dir, 'Max dose [Gy(RBE)]')
+weekly_evolution_comp(dt.stats, 'max_plan', plots_dir, 'Max dose difference [Gy(RBE)]')
 
 # == min =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
-                  'week.name', 'min', 'stage', plots_dir, 'Min dose (Gy(RBE))')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'min_plan', 'stage', plots_dir, 'Min dose difference (Gy(RBE))') 
+                  'week.name', 'min', 'stage', plots_dir, 'Min dose [Gy(RBE)]')
+weekly_evolution_comp(dt.stats, 'min_plan', plots_dir, 'Min dose difference [Gy(RBE)]', -15) 
 
 # == D2_D98 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
-                  'week.name', 'D2_D98', 'stage', plots_dir, 'D2-D98 (Gy(RBE))')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'D2_D98_plan', 'stage', plots_dir, 'D2-D98 difference (Gy(RBE))')
+                  'week.name', 'D2_D98', 'stage', plots_dir, 'D2-D98 [Gy(RBE)]')
+weekly_evolution_comp(dt.stats, 'D2_D98_plan', plots_dir, 'D2-D98 difference [Gy(RBE)]')
 
 # == V95 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V95', 'stage', plots_dir, 'V95 (%)')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'V95_plan', 'stage', plots_dir, 'V95 difference (%)')
+weekly_evolution_comp(dt.stats, 'V95_plan', plots_dir, expression('V95 difference ('*Delta*'%)'), -12.5)
 
 # == V98 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V98', 'stage', plots_dir, 'V98 (%)')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'V98_plan', 'stage', plots_dir, 'V98 difference (%)')
+weekly_evolution_comp(dt.stats, 'V98_plan', plots_dir, expression('V98 difference ('*Delta*'%)'), -25)
 
 # == V100 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V100', 'stage', plots_dir, 'V100 (%)')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'V100_plan', 'stage', plots_dir, 'V100 difference (%)')
+weekly_evolution_comp(dt.stats, 'V100_plan', plots_dir, expression('V100 difference ('*Delta*'%)'), -35)
 
 # == V102 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V102', 'stage', plots_dir, 'V102 (%)')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'V102_plan', 'stage', plots_dir, 'V102 difference (%)')
+weekly_evolution_comp(dt.stats, 'V102_plan', plots_dir, expression('V102 difference ('*Delta*'%)'))
 
 # == V105 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V105', 'stage', plots_dir, 'V105 (%)')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'V105_plan', 'stage', plots_dir, 'V105 difference (%)')
+weekly_evolution_comp(dt.stats, 'V105_plan', plots_dir, expression('V105 difference ('*Delta*'%)'))
 
 # == V107 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V107', 'stage', plots_dir, 'V107 (%)')
-weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% 'None'),
-                  'week.name', 'V107_plan', 'stage', plots_dir, 'V107 difference (%)')
+weekly_evolution_comp(dt.stats, 'V107_plan', plots_dir, expression('V107 difference ('*Delta*'%)'))
 
 
 ### Method comparison: target geometric -----------------------------
