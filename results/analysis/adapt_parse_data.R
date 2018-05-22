@@ -13,25 +13,25 @@ organize_structures <- function(dt)
                         trachea           = 'Trachea',
                         parotid_l         = 'L. Parotid',
                         parotid_r         = 'R. Parotid',
-                        submandibgld_l    = 'L. Submandible gland',
-                        submandibgld_r    = 'R. Submandible gland',
+                        submandibgld_l    = 'L. Submand. gl.',
+                        submandibgld_r    = 'R. Submand. gl.',
                         oralcavity        = 'Oral cavity',
-                        esophconstrictors = 'Esophagus constrictors',
+                        esophconstrictors = 'Esoph. constr.',
                         larynx            = 'Larynx',
                         patient.target    = 'Patient',
                         patient           = 'Whole Patient',
                         mandible          = 'Mandible')
     
-    main_oars <- list(P01 = c('R. Submandible gland', 'L. Submandible gland'),
-                      P02 = c('R. Submandible gland'),
-                      P03 = c('L. Submandible gland'),
+    main_oars <- list(P01 = c('R. Submand. gl.', 'L. Submand. gl.'),
+                      P02 = c('R. Submand. gl.'),
+                      P03 = c('L. Submand. gl.'),
                       P04 = c('R. Parotid', 'Larynx', 'Mandible', 'Oral cavity'),
-                      P05 = c('Larynx', 'R. Submandible gland', 'L. Submandible gland'),
+                      P05 = c('Larynx', 'R. Submand. gl.', 'L. Submand. gl.'),
                       P07 = c('Mandible'),
-                      P10 = c('Larynx', 'Esophagus constrictors'),
-                      P14 = c('Mandible', 'R. Submandible gland'),
+                      P10 = c('Larynx', 'Esoph. constr.'),
+                      P14 = c('Mandible', 'R. Submand. gl.'),
                       P15 = c('Larynx'),
-                      P16 = c('R. Submandible gland', 'Oral cavity'))
+                      P16 = c('R. Submand. gl.', 'Oral cavity'))
 
     dt <- dt %>%
         group_by(patient, struct) %>%

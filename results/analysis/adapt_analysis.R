@@ -26,20 +26,12 @@ plan_fractions <- 1
 
 source('adapt_parse_data.R')
 dvhs <- readData(patients, data_location, plan_fractions, target_dose, FALSE)
-### Filter current analysis ---------------------------------
-# dvhs <- filter(dvhs, week.no < 7)
-# dvhs <- filter(dvhs, week.no != 2)
-# dvhs <- filter(dvhs, method != 'Geometric')
-# dvhs <- filter(dvhs, constraint != 'Range shifter')
-# dvhs <- filter(dvhs, constraint != 'Isocenter - Range shifter') %>%
-    # mutate(constraint = factor(constraint))
-# dvhs$method <- mapvalues(dvhs$method, from = c("Weights"), to = c("Geometric"))
 
 ## Flip Submandible glands for patient 2
 dvhs <- dvhs %>%
     mutate(struct = ifelse(patient == "Patient 2",
-                           plyr::mapvalues(as.character(struct), c('L. Submandible gland', 'R. Submandible gland'),
-                                         c('R. Submandible gland', 'L. Submandible gland')),
+                           plyr::mapvalues(as.character(struct), c('L. Submand. gl.', 'R. Submand. gl.'),
+                                         c('R. Submand. gl.', 'L. Submand. gl.')),
                            as.character(struct)))
 # summary(dvhs)
 
@@ -54,7 +46,57 @@ temp <- calculateStats(dvhs, dose_fraction)
 dt.stats <- temp$stats
 dvhs <- temp$mod_dvhs
 rm(temp)
-summary(dt.stats)
+
+### Get summary
+
+paper.summary <- dt.stats %>% filter(struct == 'CTV', method %in% c('Plan', 'None')) %>%
+    select(patient, method, stage, D98, mean, D2, V95, V98, V107) %>%
+    group_by(patient, stage) %>%
+    summarise_at(.vars = vars(D98, mean, D2, V95, V98, V107),
+                 .funs = funs(min, max)) %>%
+    mutate(D98_min = D98_min*target_dose/100,
+           D98_max = D98_max*target_dose/100,
+           D2_min = D2_min*target_dose/100,
+           D2_max = D2_max*target_dose/100)
+temp <- paper.summary %>% filter(stage == 'Weekly') %>%
+    gather(type1, D98, D98_min, D98_max, factor_key=TRUE) %>%
+    gather(type2, D2, D2_min, D2_max, factor_key=TRUE) %>%
+    gather(type3, V95, V95_min, V95_max, factor_key=TRUE) %>%
+    gather(type4, V98, V98_min, V98_max, factor_key=TRUE) %>%
+    gather(type5, V107, V107_min, V107_max, factor_key=TRUE) %>%
+    gather(type6, mean, mean_min, mean_max, factor_key=TRUE) %>%
+    mutate(type1 = plyr::mapvalues(as.character(type1),
+                                   c('D98_min', 'D98_max'),
+                                   c('Worst week', 'Best week')),
+           type2 = plyr::mapvalues(as.character(type2),
+                                   c('D2_min', 'D2_max'),
+                                   c('Best week', 'Worst week')),
+           type3 = plyr::mapvalues(as.character(type3),
+                                   c('V95_min', 'V95_max'),
+                                   c('Worst week', 'Best week')),
+           type4 = plyr::mapvalues(as.character(type4),
+                                   c('V98_min', 'V98_max'),
+                                   c('Worst week', 'Best week')),
+           type5 = plyr::mapvalues(as.character(type5),
+                                   c('V107_min', 'V107_max'),
+                                   c('Best week', 'Worst week')),
+           type6 = plyr::mapvalues(as.character(type6),
+                                   c('mean_min', 'mean_max'),
+                                   c('Worst week', 'Best week'))) %>%
+    filter((type1 == 'Best week' & type2 == 'Best week' & type3 == 'Best week' &
+            type4 == 'Best week' & type5 == 'Best week' & type6 == 'Best week') |
+           (type1 == 'Worst week' & type2 == 'Worst week' & type3 == 'Worst week' &
+            type4 == 'Worst week' & type5 == 'Worst week' & type6 == 'Worst week')) %>%
+    mutate(stage = type1) %>%
+    select(-contains('type')) %>%
+    arrange(patient, stage)
+temp <- paper.summary %>% filter(stage != 'Weekly') %>%
+    mutate(D98 = D98_min, mean = mean_min, D2 = D2_min, V95 = V95_min, V98 = V98_min, V107 = V107_min) %>%
+    select(-ends_with('_min'), -ends_with('_max')) %>%
+    full_join(., temp) %>% ungroup() %>%
+    arrange(patient) %>% as.data.frame
+write_csv(format(temp, digits = 3), "unadapted_table.csv")
+    
 
 adapt_list <- select(filter(dt.stats, constraint == 'None', struct == 'CTV', V95 < 95), pat.week)
 dt.stats <- dt.stats %>% mutate(need_adapt = (pat.week %in% adapt_list$pat.week) | (week.no == 0))
@@ -84,6 +126,31 @@ for (p in levels(dvhs$patient_orig)) {
     print(plt)
     ggsave(paste0(plots_dir, '/DVHs_', p, '.pdf'), width = 50, height = 14, units = "cm")
 }
+
+### Patient DVHs: unadapted accu. --------------------------------
+p <- c("P05", "P10")
+meths <- c('Plan', 'None')
+print(paste('Creating patient', p, 'DVH'))
+plt <- ggplot(filter(dvhs, patient_orig %in% p,
+              method %in% meths, stage != 'Weekly'),
+              aes(x = dose_pct, y = vol, linetype = stage, color = struct)) +
+    geom_path() +
+    facet_wrap(~ patient, nrow = 2,
+               labeller = as_labeller(c(`Patient 5` = "Best CTV DVH: Patient 5",
+                                        `Patient 7` = "Worst CTV DVH: Patient 7"))
+               ) +
+    scale_colour_manual('Contour', values = cbPalette) +
+    guides(linetype = guide_legend(title = "Line type", order = 1),
+           colour = guide_legend(order = 0)) +
+    theme(legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(0, 0, 0, -5)) + #margin(top, right, bottom, left)
+    scale_x_continuous(breaks = seq(0, 100, by = 20)) +
+    labs(x = "Dose (%)", y = "Contour volume (%)")
+print(plt)
+f <- '/target/plan_evolution/unadapted_cumulative_DVHs'
+ggsave(paste0(plots_dir, f, '.pdf'), width = 11, height = 13, units = "cm", dpi = 600)
+ggsave(paste0(plots_dir, f, '.png'), width = 11, height = 13, units = "cm", dpi = 600)
+
 
 ## Single DVH week
 plt <- ggplot(filter(dvhs, patient_orig == p, !(method %in% c('Plan', 'None', 'Robust'))),
@@ -647,20 +714,20 @@ weekly_evolution_comp <- function(df, y, outdir, label, label_thres = NA, label_
     p <- p +
         geom_line(data = filter(df, stage == 'Weekly'),
                   aes(x = week.name, y = get(y), group = patient.no, color = patient.no, linetype = patient.no)) +
-        geom_point(aes(fill = patient.no), pch = 21, stroke = 0.3) +
-        guides(fill = guide_legend(title = "Pat. no.", keywidth = 2),
-               linetype = guide_legend(title = "Pat. no.", keywidth = 2),
-               color = guide_legend(title = "Pat. no.", keywidth = 2)) +
-        theme(legend.position = 'right') +
+        geom_point(aes(fill = patient.no), pch = 21, stroke = 0.3, size = 2) +
+        guides(fill = guide_legend(title = "Patient number", keywidth = 2),
+               linetype = guide_legend(title = "Patient number", keywidth = 2),
+               color = guide_legend(title = "Patient number", keywidth = 2)) +
+        theme(legend.position = 'top',
+              legend.margin = margin(0, 0, 0, 0),
+              legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
         labs(y = label, x = element_blank())
-    
-    
-        
+
     ## save
     print(p)
     for (ext in c('.pdf', '.png')) {
         f <- paste0(outdir, '/target/plan_evolution/plan_evolution_', filestr, ext)
-        ggsave(plot = p, f, width = 15, height = 8, units = "cm", dpi = 600)
+        ggsave(plot = p, f, width = 13, height = 9, units = "cm", dpi = 600)
     }
 }
 weekly_evolution_comp(dt.stats, 'min_plan', plots_dir, 'Min dose difference [Gy(RBE)]', -15) 
@@ -697,7 +764,7 @@ patient_evolution_box <- function(df, y, color, d, label) {
 # == mean =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'mean', 'stage', plots_dir, 'Mean dose [Gy(RBE)]')
-weekly_evolution_comp(dt.stats, 'mean_plan', plots_dir, 'Mean dose difference [Gy(RBE)]', -1.75)
+weekly_evolution_comp(dt.stats, 'mean_plan', plots_dir, expression('D'[unadapt]^'mean'-'D'[plan]^'mean'~~'[Gy(RBE)]'), -1.75)
 
 patient_evolution_box(dt.stats, 'V95_plan', plots_dir, 'Mean dose difference (Gy(RBE))')
 
@@ -712,47 +779,52 @@ ggplot(data = filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None'), s
 # == max =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'max', 'stage', plots_dir, 'Max dose [Gy(RBE)]')
-weekly_evolution_comp(dt.stats, 'max_plan', plots_dir, 'Max dose difference [Gy(RBE)]')
+weekly_evolution_comp(dt.stats, 'max_plan', plots_dir, expression('D'[unadapt]^'max'-'D'[plan]^'max'~~'[Gy(RBE)]'))
 
 # == min =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'min', 'stage', plots_dir, 'Min dose [Gy(RBE)]')
-weekly_evolution_comp(dt.stats, 'min_plan', plots_dir, 'Min dose difference [Gy(RBE)]', -15) 
+weekly_evolution_comp(dt.stats, 'min_plan', plots_dir, expression('D'[unadapt]^'min'-'D'[plan]^'min'~~'[Gy(RBE)]'), -15) 
 
 # == D2_D98 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'D2_D98', 'stage', plots_dir, 'D2-D98 [Gy(RBE)]')
-weekly_evolution_comp(dt.stats, 'D2_D98_plan', plots_dir, 'D2-D98 difference [Gy(RBE)]')
+weekly_evolution_comp(dt.stats, 'D2_D98_plan', plots_dir, expression('D2-D98'[unadapt]-'D2-D98'[plan]~~'[Gy(RBE)]'))
+
+# == D5_D95 =================================================== ===
+weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
+                     'week.name', 'D5_D95', 'stage', plots_dir, 'D5-D95 [Gy(RBE)]')
+weekly_evolution_comp(dt.stats, 'D5_D95_plan', plots_dir, expression('D5-D95'[unadapt]-'D5-D95'[plan]~~'[Gy(RBE)]'))
 
 # == V95 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V95', 'stage', plots_dir, 'V95 (%)')
-weekly_evolution_comp(dt.stats, 'V95_plan', plots_dir, expression('V95 difference ('*Delta*'%)'), -12.5)
+weekly_evolution_comp(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
 
 # == V98 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V98', 'stage', plots_dir, 'V98 (%)')
-weekly_evolution_comp(dt.stats, 'V98_plan', plots_dir, expression('V98 difference ('*Delta*'%)'), -25)
+weekly_evolution_comp(dt.stats, 'V98_plan', plots_dir, expression('V98'[unadapt]-'V98'[plan]~~'['*Delta*'%]'), -25)
 
 # == V100 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V100', 'stage', plots_dir, 'V100 (%)')
-weekly_evolution_comp(dt.stats, 'V100_plan', plots_dir, expression('V100 difference ('*Delta*'%)'), -35)
+weekly_evolution_comp(dt.stats, 'V100_plan', plots_dir, expression('V100'[unadapt]-'V100'[plan]~~'['*Delta*'%]'), -35)
 
 # == V102 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V102', 'stage', plots_dir, 'V102 (%)')
-weekly_evolution_comp(dt.stats, 'V102_plan', plots_dir, expression('V102 difference ('*Delta*'%)'))
+weekly_evolution_comp(dt.stats, 'V102_plan', plots_dir, expression('V102'[unadapt]-'V102'[plan]~~'['*Delta*'%]'))
 
 # == V105 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V105', 'stage', plots_dir, 'V105 (%)')
-weekly_evolution_comp(dt.stats, 'V105_plan', plots_dir, expression('V105 difference ('*Delta*'%)'))
+weekly_evolution_comp(dt.stats, 'V105_plan', plots_dir, expression('V105'[unadapt]-'V105'[plan]~~'['*Delta*'%]'))
 
 # == V107 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V107', 'stage', plots_dir, 'V107 (%)')
-weekly_evolution_comp(dt.stats, 'V107_plan', plots_dir, expression('V107 difference ('*Delta*'%)'))
+weekly_evolution_comp(dt.stats, 'V107_plan', plots_dir, expression('V107'[unadapt]-'V107'[plan]~~'['*Delta*'%]'))
 
 
 ### Method comparison: target geometric -----------------------------
@@ -780,9 +852,37 @@ weekly_evolution_comp(dt.stats, 'V107_plan', plots_dir, expression('V107 differe
 
 
 ggplot(data = filter(dt.stats, struct == 'CTV',
+                     method %in% c("None", "Geometric"),
+                     constraint %in% c("None", "Free", "Isocenter")),
+       aes(x = week.name, y = V95_plan, fill = case)) +
+    geom_hline(yintercept = 0, alpha = 0.6) +
+    geom_boxplot() +
+    geom_vline(xintercept = 1.5, alpha = 0.6) +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+    labs(y = 'V95', x = element_blank())
+
+
+ggplot(data = filter(dt.stats, struct == 'CTV',
+                     method %in% c("None", "Geometric"),
+                     constraint %in% c("None", "Free", "Isocenter")),
+       aes(x = patient, y = V98_plan, fill = case)) +
+    geom_hline(yintercept = 0, alpha = 0.6) +
+    geom_boxplot() +
+    facet_wrap(~ patient, scales = 'free') +
+    geom_vline(xintercept = seq(from = 1.5, to = 9.5), alpha = 0.6) +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+    labs(y = 'V98', x = element_blank())
+ggsave(paste0(plots_dir, '/target/','target_V98_geometric', '.pdf'),
+       width = 22, height = 12, units = "cm")
+
+
+ggplot(data = filter(dt.stats, struct == 'CTV',
                      method %in% c("None", "Plan", "Geometric")),
-       aes(x = short_const, y = V98, group = interaction(case, need_adapt),
-           fill = need_adapt)) +
+       aes(x = short_const, y = V98, group = case)) +
     geom_boxplot() +
     theme(legend.position = 'bottom') + 
     labs(y = 'V98 (%)', x = element_blank())

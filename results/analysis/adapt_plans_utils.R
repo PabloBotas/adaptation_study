@@ -105,7 +105,7 @@ calculateStats <- function(dvhs_input, prescription, norm_expression)
     ## Calculate stats
     dt.stats <- dvhs_input %>%
         group_by(patient, patient.no, pat.week, patient_orig, struct, main_oar, oar, week.no,
-                 week.name, case, method, constraint, short_const, scale_norm, stage) %>%
+                 week.name, case, method, constraint, short_const, scale_norm, stage, checkpoints) %>%
         mutate(dose = scale_norm*dose) %>%
         summarise(min  = minDose(dose, vol),
                   max  = maxDose(dose, vol),
