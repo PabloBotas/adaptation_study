@@ -47,7 +47,7 @@ dt.stats <- temp$stats
 dvhs <- temp$mod_dvhs
 rm(temp)
 
-### Get summary
+### Get summary ----
 
 paper.summary <- dt.stats %>% filter(struct == 'CTV', method %in% c('Plan', 'None')) %>%
     select(patient, method, stage, D98, mean, D2, V95, V98, V107) %>%
@@ -104,7 +104,7 @@ dvhs <- dvhs %>% mutate(need_adapt = (pat.week %in% adapt_list$pat.week) | (week
 
 ### Patient DVHs --------------------------------
 for (p in levels(dvhs$patient_orig)) {
-    # p <- "P16"
+    # p <- "P07"
     print(paste('Creating patient', p, 'DVH'))
     plt <- ggplot(filter(dvhs, patient_orig == p, !(method %in% c('Plan', 'None', 'Robust'))),
            aes(x = dose_pct, y = vol, color = struct)) +
@@ -151,6 +151,38 @@ f <- '/target/plan_evolution/unadapted_cumulative_DVHs'
 ggsave(paste0(plots_dir, f, '.pdf'), width = 11, height = 13, units = "cm", dpi = 600)
 ggsave(paste0(plots_dir, f, '.png'), width = 11, height = 13, units = "cm", dpi = 600)
 
+### Patient DVHs: adapted accu. --------------------------------
+p <- c("P04", "P07", "P10", "P14")
+print(paste('Creating patient', p, 'DVH'))
+ribbon_data <- dvhs %>%
+    filter(patient_orig %in% p, stage == 'Weekly',
+           constraint %in% c('Free', 'None'), method %in% c('None', 'Weights')) %>%
+    group_by(patient, method, struct) %>%
+    rowwise() %>%
+    mutate(vol_min = min(vol), vol_max = max(vol))
+    
+plt <- ggplot() +
+    geom_ribbon(data = ribbon_data,
+                aes(x = dose_pct, ymin = vol_min, ymax = vol_max, fill = struct), alpha = 0.4) +
+    geom_path(data = select(filter(dvhs, patient_orig %in% p, stage != 'Weekly',
+                            constraint %in% c('Plan'), method %in% c('Plan')), -method),
+              aes(x = dose_pct, y = vol, linetype = stage, color = struct)) +
+    geom_path(data = filter(dvhs, patient_orig %in% p, stage != 'Weekly',
+                            constraint %in% c('Free', 'None'), method %in% c('None', 'Weights')),
+              aes(x = dose_pct, y = vol, linetype = stage, color = struct)) +
+    facet_grid(method ~ patient) +
+    scale_color_manual('Contour', values = cbPalette) +
+    scale_fill_manual('Contour', values = cbPalette) +
+    guides(linetype = guide_legend(title = "Line type:", order = 1),
+           colour = FALSE, fill = FALSE) +
+    theme(legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(0, 0, 0, -5),
+          legend.position = 'top') + #margin(top, right, bottom, left)
+    scale_x_continuous(limits = c(0, 120), breaks = seq(0, 100, by = 20)) +
+    labs(x = "Dose (%)", y = "Contour volume (%)")
+print(plt)
+f <- '/adapted_cumulative_DVHs'
+ggsave(paste0(plots_dir, f, '.pdf'), width = 22, height = 11, units = "cm", dpi = 600)
 
 ## Single DVH week
 plt <- ggplot(filter(dvhs, patient_orig == p, !(method %in% c('Plan', 'None', 'Robust'))),
@@ -215,6 +247,39 @@ plot_week_parameter <- function(df, s, par, lab, plots_dir, additional_dir = '',
         ggsave(paste0(outfile, '.jpg'), width = 20, height = 12.5, units = "cm")
     }
 }
+
+plot_patient_parameter <- function(df, s, par, lab, plots_dir, additional_dir = '', to_file=FALSE) {
+    # Deduce file name and y axis label
+    str_struct <- ifelse(str_detect(s, 'TV'), s, str_lowercase(s))
+    str_par <- paste0(toupper(substr(par, 1, 1)), substr(par, 2, nchar(par)))
+    capt <- bquote(bold("Fig.:") ~ .(str_par) ~ "of plan and adaptations across fractions in" ~ .(str_struct) ~ ".")
+    
+    n_patients <- nrow(unique(select(filter(dt.stats, struct == s), patient)))
+    text_angle <- ifelse(n_patients %in% c(3,5,6), 90, 0)
+    
+    p <- ggplot(data = filter(df, struct == s, method %in% c("Plan", "Geometric", "Weights")),
+                aes(x = patient.no, y = get(par), fill = method)) +
+        geom_boxplot() +
+        facet_wrap(~ constraint) +
+        theme(axis.title.x = element_blank(),
+              axis.text.x = element_text(angle = text_angle, size = 8),
+              legend.position = 'top') +
+        labs(y = lab, caption = capt) +
+        theme(plot.caption = element_text(hjust = 0.5))
+    
+    print(p)
+    
+    if (to_file) {
+        directory <- ifelse(filter(dt.stats, struct == s)$oar[1], "OARs", "target")
+        directory <- paste0(plots_dir, '/', directory, additional_dir)
+        dir.create(directory, showWarnings = FALSE, recursive = TRUE)
+        path <- paste0(directory, '/adapted.')
+        outfile <- paste0(path, gsub( " .*$", "", lab), ".", s, ".week")
+        ggsave(paste0(outfile, '.pdf'), width = 20, height = 12.5, units = "cm")
+        ggsave(paste0(outfile, '.jpg'), width = 20, height = 12.5, units = "cm")
+    }
+}
+plot_patient_parameter(dt.stats, 'CTV', 'V95', "V95 (%)", plots_dir, '_V98_98', FALSE)
 
 # dt.stats <- dt.stats %>%
 #     mutate(patient = as.character(patient)) %>%
@@ -659,38 +724,80 @@ for (i in 1:nrow(cases)) {
 
 
 ### Patient evolution ------------------------------
-weekly_evolution_box0 <- function(df, x, y, fill, d, label) {
-    ## color
-    gg_color_hue <- function(n) {
-        hues = seq(15, 375, length = n + 1)
-        hcl(h = hues, l = 65, c = 100)[1:n]
-    }
-    cols <- gg_color_hue(3)
-    if (str_detect(y, '_plan')) {
-        cols <- cols[c(1,3,1)]
-    } else {
-        cols <- cols[c(2,1,3)]
-    }
+weekly_evolution <- function(df, y, outdir, label, label_thres = NA, label_margin = -100000) {
+    df <- filter(df, struct == 'CTV', method %in% c('None', 'Plan'))
+    
     ## filename
-    filestr <- paste0(x, '_', gsub('_plan', '_diff', y))
+    filestr <- paste0('week.name_', gsub('_plan', '_diff', y))
     ## plot
-    p <- ggplot(data = df, aes(x = get(x), y = get(y), fill = get(fill))) +
+    p <- ggplot(data = df, aes(x = week.name, y = get(y), fill = stage)) +
+        geom_hline(yintercept = 0, alpha = 0.6) +
         geom_boxplot() +
-        # geom_point() +
-        geom_text(aes(label = patient.no), position = position_jitter(width = 0.2)) +
-        geom_jitter(aes(color = patient.no), position = position_jitter(width = 0.2),
-                    alpha = 1, stroke = 0.1) +
-        scale_fill_manual('Stage', values = cols) +
-        theme(legend.position = 'none') +
-        labs(y = label, x = element_blank())
-    if (str_detect(filestr, 'diff')) {
-        p <- p + geom_hline(yintercept = 0)
+        geom_vline(xintercept = 2.5, alpha = 0.6)
+    ## If point highlight
+    if (!is.na(label_thres)) {
+        p <- p + ggrepel::geom_label_repel(data = filter(df, get(y) < label_thres),
+                                           aes(x = week.name, y = get(y), label = patient.no),
+                                           fill = 'white',
+                                           nudge_y = label_margin, box.padding = 0.15,
+                                           segment.size  = 0.3, force = 2,
+                                           segment.color = "grey50", size = 2,
+                                           arrow = arrow(length = unit(0.03, "npc"), type = "closed", ends = "first"))
     }
+    p <- p +
+        geom_point() +
+        guides(fill = guide_legend(title = "Eval. time", keywidth = 2)) +
+        theme(legend.position = 'top',
+              legend.margin = margin(0, 0, 0, 0),
+              legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+        labs(y = label, x = element_blank())
+    
     ## save
     print(p)
-    ggsave(plot = p, paste0(d, '/target/plan_evolution/plan_evolution_', filestr, '.pdf'),
-           width = 13, height = 8, units = "cm")
+    # for (ext in c('.pdf', '.png')) {
+    #     f <- paste0(outdir, '/target/plan_evolution/plan_evolution_', filestr, ext)
+    #     ggsave(plot = p, f, width = 13, height = 7, units = "cm", dpi = 600)
+    # }
 }
+weekly_evolution(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
+weekly_evolution(dt.stats, 'V107_plan', plots_dir, expression('V107'[unadapt]-'V107'[plan]~~'['*Delta*'%]'))
+
+weekly_evolution_simple <- function(df, y, outdir, label, label_thres = NA, label_margin = -100000) {
+    df <- filter(df, struct == 'CTV', method %in% 'None')
+    
+    ## filename
+    filestr <- paste0('week.name_', gsub('_plan', '_diff', y))
+    ## plot
+    p <- ggplot(data = df, aes(x = week.name, y = get(y), fill = stage)) +
+        geom_hline(yintercept = 0, alpha = 0.6) +
+        geom_boxplot() +
+        geom_vline(xintercept = 1.5, alpha = 0.6)
+    ## If point highlight
+    if (!is.na(label_thres)) {
+        p <- p + ggrepel::geom_label_repel(data = filter(df, get(y) < label_thres),
+                                           aes(x = week.name, y = get(y), label = patient.no),
+                                           fill = 'white',
+                                           nudge_y = label_margin, box.padding = 0.15,
+                                           segment.size  = 0.3, force = 2,
+                                           segment.color = "grey50", size = 2,
+                                           arrow = arrow(length = unit(0.03, "npc"), type = "closed", ends = "first"))
+    }
+    p <- p +
+        geom_point() +
+        guides(fill = guide_legend(title = "Eval. time", keywidth = 2)) +
+        theme(legend.position = 'top',
+              legend.margin = margin(0, 0, 0, 0),
+              legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+        labs(y = label, x = element_blank())
+    
+    ## save
+    print(p)
+    for (ext in c('.pdf', '.png')) {
+        f <- paste0(outdir, '/target/plan_evolution/plan_evolution_simple_', filestr, ext)
+        ggsave(plot = p, f, width = 13, height = 7, units = "cm", dpi = 600)
+    }
+}
+weekly_evolution_simple(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
 
 weekly_evolution_comp <- function(df, y, outdir, label, label_thres = NA, label_margin = -100000) {
     df <- filter(df, struct == 'CTV', method %in% 'None')
@@ -730,7 +837,6 @@ weekly_evolution_comp <- function(df, y, outdir, label, label_thres = NA, label_
         ggsave(plot = p, f, width = 13, height = 9, units = "cm", dpi = 600)
     }
 }
-weekly_evolution_comp(dt.stats, 'min_plan', plots_dir, 'Min dose difference [Gy(RBE)]', -15) 
 
 patient_evolution_box <- function(df, y, color, d, label) {
     df <- filter(df, struct == 'CTV', method %in% 'None', stage %in% c('Cum.', 'Weekly'))
@@ -800,6 +906,7 @@ weekly_evolution_comp(dt.stats, 'D5_D95_plan', plots_dir, expression('D5-D95'[un
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V95', 'stage', plots_dir, 'V95 (%)')
 weekly_evolution_comp(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
+weekly_evolution_simple(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
 
 # == V98 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
@@ -850,18 +957,63 @@ weekly_evolution_comp(dt.stats, 'V107_plan', plots_dir, expression('V107'[unadap
 # ggsave(paste0(plots_dir, '/target/','target_V98_geometric_need_adapt_weekly', '.pdf'),
 #        width = 14, height = 8, units = "cm")
 
+ggplot(data = filter(dt.stats, struct == 'CTV',
+                     method %in% c("None", "Geometric", "Plan"),
+                     stage %in% c('Weekly', 'Plan', 'None')),
+       aes(x = short_const, y = V95, color = constraint)) +
+    geom_hline(yintercept = 95, alpha = 0.6) +
+    geom_point() +
+    facet_wrap(~ patient) +
+    geom_vline(xintercept = c(1.5, 5.5), alpha = 0.6) +
+    guides(size = FALSE, color = FALSE) +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin
+    theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+    labs(y = 'V95 [%]', x = element_blank())
+ggsave(paste0(plots_dir, '/target/','patient_facet_V95_geometric.pdf'),
+              width = 16, height = 8, units = "cm")
 
 ggplot(data = filter(dt.stats, struct == 'CTV',
-                     method %in% c("None", "Geometric"),
-                     constraint %in% c("None", "Free", "Isocenter")),
-       aes(x = week.name, y = V95_plan, fill = case)) +
-    geom_hline(yintercept = 0, alpha = 0.6) +
-    geom_boxplot() +
-    geom_vline(xintercept = 1.5, alpha = 0.6) +
+                     method %in% c("None", "Weights", "Plan"),
+                     stage %in% c('Weekly', 'Plan', 'None')),
+       aes(x = short_const, y = V95, color = constraint)) +
+    geom_hline(yintercept = 95, alpha = 0.6) +
+    geom_point() +
+    facet_wrap(~ patient) +
+    geom_vline(xintercept = c(1.5, 5.5), alpha = 0.6) +
+    guides(size = FALSE, color = FALSE) +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin
+    theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+    labs(y = 'V95 [%]', x = element_blank())
+ggsave(paste0(plots_dir, '/target/','patient_facet_V95_weights.pdf'),
+       width = 16, height = 8, units = "cm")
+
+
+magnitude.df <- dt.stats %>%
+    gather(magnitude, val, V95, V98, V100, V102, V105, V107, V110) %>%
+    mutate(magnitude = factor(magnitude, levels = c('V95', 'V98', 'V100', 'V102', 'V105', 'V107', 'V110'))) %>%
+    group_by(stage) %>%
+    mutate(alpha1 = ifelse(method %in% c('Plan', 'None'), 1.0, 0),
+           alpha2 = ifelse(method %in% c('Weigths', 'Geometric'), 1.0, 0)) %>%
+    ungroup()
+    
+ggplot(data = filter(magnitude.df, struct == 'CTV',
+                     method %in% c("None", "Geometric", "Plan"),
+                     stage %in% c("Plan", "Weekly")),
+       aes(x = magnitude, y = val, fill = constraint, alpha = alpha2)) +
+    geom_hline(yintercept = c(95, 10), alpha = 0.6) +
+    geom_boxplot(aes(color = constraint)) +
+    geom_vline(xintercept = c(1.5:1:6.5), alpha = 0.6) +
     theme(legend.position = 'top',
           legend.margin = margin(0, 0, 0, 0),
           legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
-    labs(y = 'V95', x = element_blank())
+    guides(alpha = FALSE, fill = guide_legend(title = "Method"), color = FALSE) +
+    labs(y = 'CTV volume [%]', x = element_blank())
+ggsave(paste0(plots_dir, '/target/','DVH_points_geometric_adapt.pdf'),
+       width = 16, height = 8, units = "cm")
 
 
 ggplot(data = filter(dt.stats, struct == 'CTV',
