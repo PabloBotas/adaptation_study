@@ -128,31 +128,35 @@ for (p in levels(dvhs$patient_orig)) {
 }
 
 ### Patient DVHs: unadapted accu. --------------------------------
-p <- c("P05", "P10")
-meths <- c('Plan', 'None')
+p <- c("Patient 4", "Patient 6", "Patient 7", "Patient 8")
+meths <- c('Plan', 'None', 'Weights')
 print(paste('Creating patient', p, 'DVH'))
-plt <- ggplot(filter(dvhs, patient_orig %in% p,
-                     method %in% meths, stage != 'Weekly',
-                     !(struct %in% c('R. Parotid', 'R. Cochlea', 'L. Parotid'))),
-              aes(x = dose_pct, y = vol, linetype = stage, color = struct)) +
+temp <- mutate(filter(dvhs, patient %in% p,
+                      method %in% meths, stage != 'Weekly',
+                      short_const %in% c('Plan', 'None', 'Free'),
+                      !(struct %in% c('Whole Patient', 'R. Cochlea', 'L. Cochlea', 'L. Submand. gl.', 'Oral cavity')),
+                      !(method == 'None' & struct != 'CTV')),
+               short_const = factor(short_const, levels = c('Free', 'Plan', 'None')))
+plt <- ggplot(temp,
+              aes(x = dose_pct, y = vol, linetype = short_const, color = struct, alpha = short_const)) +
     geom_path() +
-    facet_wrap(~ patient, nrow = 1,
-               labeller = as_labeller(c(`Patient 5` = "Best CTV DVH: Patient 5",
-                                        `Patient 7` = "Worst CTV DVH: Patient 7"))
-               ) +
+    facet_wrap(~ patient, nrow = 1) +
     scale_colour_manual('Contour', values = cbPalette) +
+    scale_alpha_manual('Contour', values = c(1, 0.5, 0.5)) +
     guides(linetype = guide_legend(title = "Line type", order = 1),
-           colour = guide_legend(order = 0, ncol = 2)) +
-    theme(legend.position = 'right',
+           colour = guide_legend(order = 0, ncol = 6),
+           alpha = FALSE) +
+    theme(legend.text = element_text(size = 8),
+          legend.position = 'top',
           legend.box = 'vertical',
           legend.margin = margin(0, 0, 0, 0),
-          legend.box.margin = margin(0, 0, 0, -5)) + #margin(top, right, bottom, left)
+          legend.box.margin = margin(-5, 0, 0, 0)) + #margin(top, right, bottom, left)
     scale_x_continuous(breaks = seq(0, 100, by = 20)) +
     labs(x = "Dose (%)", y = "Contour volume (%)")
 print(plt)
-f <- '/target/plan_evolution/unadapted_cumulative_DVHs'
-ggsave(paste0(plots_dir, f, '.pdf'), width = 17, height = 6.5, units = "cm", dpi = 600)
-ggsave(paste0(plots_dir, f, '.png'), width = 17, height = 6.5, units = "cm", dpi = 600)
+f <- '/target/plan_evolution/adapted_cumulative_DVHs'
+ggsave(paste0(plots_dir, f, '.pdf'), width = 17, height = 8, units = "cm")
+ggsave(paste0(plots_dir, f, '.tiff'), width = 17, height = 8, units = "cm", dpi = 150)
 
 ### Patient DVHs: adapted accu. --------------------------------
 p <- c("P04", "P07", "P10", "P14")
@@ -937,65 +941,9 @@ weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'No
 weekly_evolution_comp(dt.stats, 'V107_plan', plots_dir, expression('V107'[unadapt]-'V107'[plan]~~'['*Delta*'%]'))
 
 
-### Method comparison: target geometric -----------------------------
+### PAPER FIGS CTV -----------------------------
 
-# ggplot(data = filter(dt.stats, struct == 'CTV',
-#                      method %in% c("None", "Plan", "Geometric")),
-#        aes(x = week.name, y = V98, group = interaction(case, week.name),
-#            fill = constraint)) +
-#     geom_boxplot() +
-#     theme(legend.position = 'bottom') + 
-#     labs(y = 'V98 (%)', x = element_blank())
-# ggsave(paste0(plots_dir, '/target/','target_V98_geometric_all_weekly', '.pdf'),
-#        width = 14, height = 8, units = "cm")
-# 
-# ggplot(data = filter(dt.stats, struct == 'CTV',
-#                      method %in% c("None", "Plan", "Geometric"),
-#                      need_adapt == TRUE),
-#        aes(x = week.name, y = V98, group = interaction(case, week.name),
-#            fill = constraint)) +
-#     geom_boxplot() +
-#     theme(legend.position = 'bottom') + 
-#     labs(y = 'V98 (%)', x = element_blank())
-# ggsave(paste0(plots_dir, '/target/','target_V98_geometric_need_adapt_weekly', '.pdf'),
-#        width = 14, height = 8, units = "cm")
-
-ggplot(data = filter(dt.stats, struct == 'CTV',
-                     method %in% c("None", "Geometric", "Plan"),
-                     stage %in% c('Weekly', 'Plan', 'None')),
-       aes(x = short_const, y = V95, color = constraint)) +
-    geom_hline(yintercept = 95, alpha = 0.6) +
-    geom_point() +
-    facet_wrap(~ patient) +
-    geom_vline(xintercept = c(1.5, 5.5), alpha = 0.6) +
-    guides(size = FALSE, color = FALSE) +
-    theme(legend.position = 'top',
-          legend.margin = margin(0, 0, 0, 0),
-          legend.box.margin = margin(-5, 0, -10, 0)) + #margin
-    theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
-    labs(y = 'V95 [%]', x = element_blank())
-ggsave(paste0(plots_dir, '/target/','patient_facet_V95_geometric.pdf'),
-              width = 16, height = 8, units = "cm")
-
-ggplot(data = filter(dt.stats, struct == 'CTV',
-                     method %in% c("None", "Weights", "Plan"),
-                     stage %in% c('Weekly', 'Plan', 'None')),
-       aes(x = short_const, y = V95, color = constraint)) +
-    geom_hline(yintercept = 95, alpha = 0.6) +
-    geom_point() +
-    facet_wrap(~ patient) +
-    geom_vline(xintercept = c(1.5, 5.5), alpha = 0.6) +
-    guides(size = FALSE, color = FALSE) +
-    theme(legend.position = 'top',
-          legend.margin = margin(0, 0, 0, 0),
-          legend.box.margin = margin(-5, 0, -10, 0)) + #margin
-    theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
-    labs(y = 'V95 [%]', x = element_blank())
-ggsave(paste0(plots_dir, '/target/','patient_facet_V95_weights.pdf'),
-       width = 16, height = 8, units = "cm")
-
-
-magnitude.df <- dt.stats %>%
+paper.res.1 <- dt.stats %>%
     gather(magnitude, val, V95, V98, V107, V110, D2, D98) %>%
     mutate(magnitude = factor(magnitude, levels = c('V95', 'V98', 'V107', 'V110', 'D98', 'D2'))) %>%
     mutate(data.type = ifelse(magnitude %in% c('V95', 'V98'), 'Coverage',
@@ -1009,7 +957,7 @@ magnitude.df <- dt.stats %>%
     droplevels() %>%
     ungroup()
 
-ggplot(data = filter(magnitude.df, struct == 'CTV',
+ggplot(data = filter(paper.res.1, struct == 'CTV',
                      method %in% c("None", "Geometric", "Plan"),
                      stage %in% c("Plan", "Cum.")),
        aes(x = magnitude, y = val, fill = short_const)) +
@@ -1023,7 +971,7 @@ ggplot(data = filter(magnitude.df, struct == 'CTV',
 ggsave(paste0(plots_dir, '/target/DVH_points_geometric.pdf'), width = 16, height = 6, units = "cm")
 ggsave(paste0(plots_dir, '/target/DVH_points_geometric.tiff'), width = 16, height = 6, units = "cm", dpi = 150)
 
-ggplot(data = filter(magnitude.df, struct == 'CTV',
+ggplot(data = filter(paper.res.1, struct == 'CTV',
                      method %in% c("None", "Weights", "Plan"),
                      stage %in% c("Plan", "Cum.")),
        aes(x = magnitude, y = val, fill = short_const)) +
@@ -1037,8 +985,92 @@ ggplot(data = filter(magnitude.df, struct == 'CTV',
 ggsave(paste0(plots_dir, '/target/DVH_points_weights.pdf'), width = 16, height = 6, units = "cm")
 ggsave(paste0(plots_dir, '/target/DVH_points_weights.tiff'), width = 16, height = 6, units = "cm", dpi = 150)
 
-### P-value tests =================================
-test.results <- filter(dt.stats, method %in% c('Plan', 'None', 'Weights'), struct == 'CTV',
+paper.res.2 <- dt.stats %>%
+    gather(magnitude, val, V95_plan, V98_plan, V107_plan, V110_plan, D2_plan, D98_plan) %>%
+    mutate(magnitude = gsub("_plan", "", magnitude)) %>%
+    mutate(magnitude = factor(magnitude, levels = c('V95', 'V98', 'V107', 'V110', 'D98', 'D2'))) %>%
+    mutate(data.type = ifelse(magnitude %in% c('V95', 'V98'), 'Coverage',
+                              ifelse(magnitude %in% c('V107', 'V110'), 'Overdose', 'Min/max dose'))) %>%
+    mutate(data.type = factor(data.type, levels = c('Coverage', 'Overdose', 'Min/max dose'))) %>%
+    mutate(constraint = factor(constraint, levels = c('Plan', 'None', 'Free', 'Isocenter', 'Range shifter', 'Isocenter - Range shifter'))) %>%
+    mutate(short_const = factor(short_const, levels = c('Plan', 'None', 'Free', 'Iso', 'RS', 'Iso-RS'))) %>%
+    group_by(stage) %>%
+    mutate(alpha1 = ifelse(method %in% c('Plan', 'None'), 1.0, 1.0),
+           alpha2 = ifelse(method %in% c('Weigths', 'Geometric'), 1.0, 1.0)) %>%
+    droplevels() %>%
+    ungroup()
+
+ggplot(data = mutate(filter(paper.res.2, struct == 'CTV',
+                            method %in% c("Weights"),
+                            !(short_const %in% c("Iso-RS", "RS"))),
+                     stage = factor(stage, levels = c('Cum.', 'Weekly'))),
+       aes(x = magnitude, y = val, fill = interaction(stage, short_const), group = interaction(magnitude, stage, short_const))) +
+    geom_boxplot(outlier.shape = 21) +
+    scale_fill_discrete(labels = c("Free: Cum.", "Free: Weekly", "Iso: Cum.", "Iso: Weekly")) +
+    facet_wrap( ~ data.type, scales = 'free') +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+    guides(fill = guide_legend(title = "Method", nrow = 1), shape = guide_legend(title = element_blank())) +
+    labs(y = 'CTV or Dose [%] - Plan', x = element_blank())
+ggsave(paste0(plots_dir, '/target/DVH_points_weights_diff.pdf'), width = 16, height = 6, units = "cm")
+ggsave(paste0(plots_dir, '/target/DVH_points_weights_diff.tiff'), width = 16, height = 6, units = "cm", dpi = 150)
+
+### PAPER FIGS OARS -----------------------------
+
+paper.res.oars <- dt.stats %>%
+    mutate(struct = gsub('R. |L. ', '', struct)) %>%
+    filter(!(struct %in% c('Esoph. constr.', 'Parotid', 'Oral cavity')),
+           main_oar == TRUE) %>%
+    gather(magnitude, val, mean, max) %>%
+    mutate(magnitude = factor(magnitude, levels = c('mean', 'max'))) %>%
+    mutate(constraint = factor(constraint, levels = c('Plan', 'None', 'Free', 'Isocenter', 'Range shifter', 'Isocenter - Range shifter'))) %>%
+    mutate(short_const = factor(short_const, levels = c('Plan', 'None', 'Free', 'Iso', 'RS', 'Iso-RS'))) %>%
+    group_by(stage) %>%
+    droplevels() %>%
+    ungroup()
+
+ggplot(data = filter(paper.res.oars,
+                     method %in% c("None", "Weights", "Plan"),
+                     stage %in% c("Plan", "Cum.")),
+       aes(x = magnitude, y = val, fill = short_const)) +
+    geom_boxplot(outlier.shape = 21) +
+    facet_wrap( ~ struct, scales = 'free') +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+    guides(alpha = FALSE, fill = guide_legend(title = "Method", nrow = 1), color = FALSE) +
+    labs(y = 'Dose [Gy(RBE)]', x = element_blank())
+
+paper.res.oars.rel <- dt.stats %>%
+    mutate(struct = gsub('R. |L. ', '', struct)) %>%
+    filter(!(struct %in% c('Esoph. constr.', 'Parotid', 'Oral cavity')),
+           main_oar == TRUE) %>%
+    gather(magnitude, val, mean_plan, max_plan) %>%
+    mutate(magnitude = gsub("_plan", "", magnitude)) %>%
+    mutate(magnitude = factor(magnitude, levels = c('mean', 'max'))) %>%
+    mutate(constraint = factor(constraint, levels = c('Plan', 'None', 'Free', 'Isocenter', 'Range shifter', 'Isocenter - Range shifter'))) %>%
+    mutate(short_const = factor(short_const, levels = c('Plan', 'None', 'Free', 'Iso', 'RS', 'Iso-RS'))) %>%
+    mutate(stage = factor(stage, levels = c('Cum.', 'Weekly'))) %>%
+    group_by(stage) %>%
+    droplevels() %>%
+    ungroup()
+
+ggplot(data = filter(paper.res.oars.rel,
+                     method %in% c("Weights")),
+       aes(x = magnitude, y = val, fill = short_const)) +
+    geom_boxplot(outlier.shape = 21) +
+    facet_grid(stage ~ struct, scales = 'free') +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+    guides(alpha = FALSE, fill = guide_legend(title = "Method", nrow = 1), color = FALSE) +
+    labs(y = 'Dose [Gy(RBE)] - Plan', x = element_blank())
+ggsave(paste0(plots_dir, '/OARs/DVH_points_weights_diff_OAR.pdf'), width = 16, height = 9, units = "cm")
+ggsave(paste0(plots_dir, '/OARs/DVH_points_weights_diff_OAR.tiff'), width = 16, height = 9, units = "cm", dpi = 150)
+
+### PAPER TABLE =================================
+ctv.results <- filter(dt.stats, method %in% c('Plan', 'None', 'Weights'), struct == 'CTV',
                        short_const %in% c('Plan', 'None', 'Free', 'Iso')) %>%
     mutate(stage = ifelse(stage == 'Plan', 'Cum.', as.character(stage))) %>%
     mutate(stage = factor(stage)) %>%
@@ -1055,10 +1087,10 @@ test.results <- filter(dt.stats, method %in% c('Plan', 'None', 'Weights'), struc
     ungroup() %>%
     select(parameter, short_const, Cum._min, Cum._mean, Cum._sd, Cum._median, Cum._IQR, Cum._max, Weekly_min, Weekly_mean, Weekly_sd, Weekly_median, Weekly_IQR, Weekly_max)
 
-write.table(test.results, '~/Desktop/mytable.csv', append = FALSE, sep = ", ", dec = ".",
+write.table(ctv.results, '~/Desktop/mytable.csv', append = FALSE, sep = ", ", dec = ".",
             row.names = FALSE, col.names = TRUE)
 
-test.results.rel <- filter(dt.stats, method %in% c('None', 'Weights'), struct == 'CTV',
+ctv.results.rel <- filter(dt.stats, method %in% c('None', 'Weights'), struct == 'CTV',
        short_const %in% c('None', 'Free', 'Iso')) %>%
     select(short_const, stage, patient, method, V95_plan, V98_plan, V107_plan, V110_plan, D98_plan, D2_plan) %>%
     group_by(method, short_const, stage) %>% arrange(method, short_const, stage) %>%
@@ -1073,92 +1105,168 @@ test.results.rel <- filter(dt.stats, method %in% c('None', 'Weights'), struct ==
     ungroup() %>%
     select(parameter, short_const, Cum._min, Cum._mean, Cum._sd, Cum._median, Cum._IQR, Cum._max, Weekly_min, Weekly_mean, Weekly_sd, Weekly_median, Weekly_IQR, Weekly_max)
 
-magnitude.df <- dt.stats %>%
-    gather(magnitude, val, V95_plan, V98_plan, V107_plan, V110_plan, D2_plan, D98_plan) %>%
-    mutate(magnitude = gsub("_plan", "", magnitude)) %>%
-    mutate(magnitude = factor(magnitude, levels = c('V95', 'V98', 'V107', 'V110', 'D98', 'D2'))) %>%
-    mutate(data.type = ifelse(magnitude %in% c('V95', 'V98'), 'Coverage',
-                              ifelse(magnitude %in% c('V107', 'V110'), 'Overdose', 'Min/max dose'))) %>%
-    mutate(data.type = factor(data.type, levels = c('Coverage', 'Overdose', 'Min/max dose'))) %>%
-    mutate(constraint = factor(constraint, levels = c('Plan', 'None', 'Free', 'Isocenter', 'Range shifter', 'Isocenter - Range shifter'))) %>%
-    mutate(short_const = factor(short_const, levels = c('Plan', 'None', 'Free', 'Iso', 'RS', 'Iso-RS'))) %>%
-    group_by(stage) %>%
-    mutate(alpha1 = ifelse(method %in% c('Plan', 'None'), 1.0, 1.0),
-           alpha2 = ifelse(method %in% c('Weigths', 'Geometric'), 1.0, 1.0)) %>%
-    droplevels() %>%
-    ungroup()
 
-ggplot(data = mutate(filter(magnitude.df, struct == 'CTV',
-                     method %in% c("Weights"),
-                     !(short_const %in% c("Iso-RS", "RS"))),
-                     stage = factor(stage, levels = c('Cum.', 'Weekly'))),
-       aes(x = magnitude, y = val, fill = interaction(stage, short_const), group = interaction(magnitude, stage, short_const))) +
-    geom_boxplot(outlier.shape = 21) +
-    scale_fill_discrete(labels = c("Free: Cum.", "Free: Weekly", "Iso: Cum.", "Iso: Weekly")) +
-    facet_wrap( ~ data.type, scales = 'free') +
+### T-TESTS =======================================
+my_diff <- function(v) {
+    # The free strategy is the first element in the vector
+    return(v - v[1])
+}
+my_ttest <- function(v) {
+    if (length(v) == 1) {
+        return(NA)
+    }
+    return(t.test(v, alternative = 'less')$p.value)
+}
+df.mode.comp <- filter(dt.stats, method == 'Weights', struct == 'CTV' | main_oar == TRUE) %>%
+    select(struct, stage, patient, short_const, week.no, V95, V98, V107, V110, D98, D2, min, mean, max, D2_D98, D5_D95) %>%
+    mutate(struct = gsub('R. |L. ', '', struct)) %>%
+    mutate(struct = factor(struct)) %>%
+    group_by(struct, patient, stage, week.no) %>%
+    arrange(struct, patient, stage, week.no) %>%
+    mutate_at(.vars = vars(V95:D5_D95), .funs = funs(my_diff)) %>%
+    filter(short_const != 'Free')
+
+df.mode.comp.long <- df.mode.comp %>%
+    ungroup() %>%
+    gather(parameter, val, V95:D5_D95, factor_key = TRUE) %>%
+    filter((struct == 'CTV' & parameter != 'mean') |
+               (struct != 'CTV' & parameter %in% c('max', 'mean')),
+           !(struct %in% c('Esoph. constr.', 'Parotid', 'Oral cavity'))) %>%
+    mutate(stage = factor(stage, levels = c('Cum.', 'Weekly'))) %>%
+    mutate(parameter = factor(parameter, levels = c('V95', 'V98', 'V107', 'V110', 'min', 'D98', 'mean', 'D2', 'max', 'D2_D98', 'D5_D95'))) %>%
+    rowwise() %>%
+    mutate(link.V = ifelse(parameter %in% c('V95', 'V98', 'V107', 'V110'), 'Volume pars.',
+                           ifelse(parameter %in% c('D2_D98', 'D5_D95'), 'Homogeneity pars.', 'Dose pars.'))) %>%
+    ungroup() %>%
+    mutate(link.V = factor(link.V, levels = c('Volume pars.', 'Dose pars.', 'Homogeneity pars.')))
+
+df.ttest <- df.mode.comp %>%
+    mutate_at(.vars = vars(V107, V110, D2_D98, D5_D95), .funs = (function(v){return(-v)}(.))) %>%
+    mutate(D2 = if (struct == 'CTV') -D2 else D2,
+           mean = if (struct == 'CTV') -mean else mean,
+           max = if (struct == 'CTV') -max else max,
+           mean = if (struct != 'CTV') -mean else mean,
+           D2 = if (struct != 'CTV') -D2 else D2,
+           max = if (struct != 'CTV') -max else max) %>%
+    ungroup() %>% group_by(struct, stage, short_const) %>%
+    summarise_at(.vars = vars(V95:D5_D95), .funs = funs(my_ttest)) %>%
+    ungroup() %>%
+    gather(parameter, val, V95:D5_D95, factor_key = TRUE) %>%
+    filter((struct == 'CTV' & parameter != 'mean') |
+           (struct != 'CTV' & parameter %in% c('max', 'mean')),
+           !(struct %in% c('Esoph. constr.', 'Parotid', 'Oral cavity'))) %>%
+    mutate(stage = factor(stage, levels = c('Cum.', 'Weekly'))) %>%
+    mutate(parameter = factor(parameter, levels = c('V95', 'V98', 'V107', 'V110', 'min', 'D98', 'mean', 'D2', 'max', 'D2_D98', 'D5_D95'))) %>%
+    rowwise() %>%
+    mutate(link.V = ifelse(parameter %in% c('V95', 'V98', 'V107', 'V110'), 'Volume pars.',
+                           ifelse(parameter %in% c('D2_D98', 'D5_D95'), 'Homogeneity pars.', 'Dose pars.'))) %>%
+    ungroup() %>%
+    mutate(link.V = factor(link.V, levels = c('Volume pars.', 'Dose pars.', 'Homogeneity pars.')))
+
+
+ggplot(data = filter(df.mode.comp.long, link.V == 'Dose pars.'),
+       aes(x = parameter, y = val,
+           group = interaction(parameter, stage))) +
+    geom_hline(yintercept = 0, alpha = 0.5) +
+    geom_boxplot() +
+    stat_summary(fun.y = mean, aes(color = stage, group = stage), geom = "point", position = position_jitterdodge(jitter.width = 0), size = 3) +
+    scale_color_brewer(palette = "Set1") +
+    facet_grid(short_const ~ struct, scales = 'free', space = 'free') +
     theme(legend.position = 'top',
           legend.margin = margin(0, 0, 0, 0),
           legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
-    guides(fill = guide_legend(title = "Method", nrow = 1), shape = guide_legend(title = element_blank())) +
-    labs(y = 'CTV [%] or Dose [%] - Plan', x = element_blank())
-ggsave(paste0(plots_dir, '/target/DVH_points_weights_diff.pdf'), width = 16, height = 6, units = "cm")
-ggsave(paste0(plots_dir, '/target/DVH_points_weights_diff.tiff'), width = 16, height = 6, units = "cm", dpi = 150)
+    guides(color = guide_legend(title = "Mode - Free dose difference: ", nrow = 1)) +
+    labs(y = expression("Dose ["*Delta*"%]"), x = element_blank())
+ggsave(paste0(plots_dir, '/mode_comparison.pdf'), width = 16, height = 10, units = "cm")
+ggsave(paste0(plots_dir, '/mode_comparison.tiff'), width = 16, height = 10, units = "cm", dpi = 150)
 
-
-ggplot(data = filter(dvhs, struct == 'CTV',
-                     method %in% c('Plan', 'None', 'Weights'),
-                     short_const %in% c('Plan', 'None', 'Free', 'Iso'),
-                     stage %in% c('Plan', 'Cum.')),
-       aes(y = vol, x = dose_pct, color = short_const)) +
-    geom_path() +
-    xlim(0, 110) +
-    facet_wrap( ~ patient)
-
-ggplot(data = filter(dt.stats, struct == 'CTV',
-                     method %in% c("None", "Geometric"),
-                     constraint %in% c("None", "Free", "Isocenter")),
-       aes(x = patient, y = V98_plan, fill = case)) +
-    geom_hline(yintercept = 0, alpha = 0.6) +
+ggplot(data = filter(df.mode.comp.long, struct == 'CTV', link.V != 'Homogeneity pars.'),
+       aes(x = parameter, y = val,
+           group = interaction(parameter, stage))) +
+    geom_hline(yintercept = 0, alpha = 0.5) +
     geom_boxplot() +
-    facet_wrap(~ patient, scales = 'free') +
-    geom_vline(xintercept = seq(from = 1.5, to = 9.5), alpha = 0.6) +
+    # geom_jitter(aes(group = short_const), shape = 21, position = position_jitterdodge()) +
+    stat_summary(fun.y = mean, aes(color = stage, group = stage), geom = "point", position = position_jitterdodge(jitter.width = 0), size = 3) +
+    scale_color_brewer(palette = "Set1") +
+    facet_grid(short_const ~ link.V, scales = 'free') +
     theme(legend.position = 'top',
           legend.margin = margin(0, 0, 0, 0),
           legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
-    labs(y = 'V98', x = element_blank())
-ggsave(paste0(plots_dir, '/target/','target_V98_geometric', '.pdf'),
-       width = 22, height = 12, units = "cm")
+    guides(color = guide_legend(title = "Average CTV parameter difference: ", nrow = 1)) +
+    labs(y = expression("Volume or Dose ["*Delta*"%]"), x = element_blank())
+ggsave(paste0(plots_dir, '/mode_comparison_CTV.pdf'), width = 16, height = 10, units = "cm")
+ggsave(paste0(plots_dir, '/mode_comparison_CTV.tiff'), width = 16, height = 10, units = "cm", dpi = 150)
 
-
-ggplot(data = filter(dt.stats, struct == 'CTV',
-                     method %in% c("None", "Plan", "Geometric")),
-       aes(x = short_const, y = V98, group = case)) +
+ggplot(data = filter(df.mode.comp.long, struct != 'CTV'),
+       aes(x = parameter, y = val,
+           group = interaction(parameter, stage))) +
+    geom_hline(yintercept = 0, alpha = 0.5) +
     geom_boxplot() +
-    theme(legend.position = 'bottom') + 
-    labs(y = 'V98 (%)', x = element_blank())
-ggsave(paste0(plots_dir, '/target/','target_V98_geometric_need_adapt', '.pdf'),
-       width = 16, height = 8, units = "cm")
+    # geom_jitter(aes(group = short_const), shape = 21, position = position_jitterdodge()) +
+    stat_summary(fun.y = mean, aes(color = stage, group = stage), geom = "point", position = position_jitterdodge(jitter.width = 0), size = 3) +
+    scale_color_brewer(palette = "Set1") +
+    facet_grid(short_const ~ struct, scales = 'free') +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+    guides(color = guide_legend(title = "Average OARs parameter difference: ", nrow = 1)) +
+    labs(y = expression("Dose ["*Delta*"%]"), x = element_blank())
+ggsave(paste0(plots_dir, '/mode_comparison_OARs.pdf'), width = 16, height = 10, units = "cm")
+ggsave(paste0(plots_dir, '/mode_comparison_OARs.tiff'), width = 16, height = 10, units = "cm", dpi = 150)
+
+ggplot(data = filter(df.ttest, struct == 'CTV'),
+       aes(x = parameter, y = val,
+           color = stage,
+           shape = stage,
+           group = interaction(link.V, stage))) +
+    geom_rect(xmin = 0, xmax = 11, ymin = 0, ymax = 0.05, fill = 'green', color = NA, alpha = 0.025) +
+    geom_rect(xmin = 0, xmax = 11, ymin = 0.95, ymax = 1, fill = 'red', color = NA, alpha = 0.025) +
+    geom_point() +
+    geom_hline(yintercept = c(0.95, 0.5, 0.05), alpha = 0.6) +
+    geom_line() +
+    scale_y_continuous(limits = c(0, 1), expand = c(0,0)) +
+    facet_grid(struct ~ short_const) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+          legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+    guides(color = guide_legend(title = "Dose type", nrow = 1), shape = guide_legend(title = "Dose type", nrow = 1)) +
+    labs(y = 'p-value', x = element_blank())
+ggsave(paste0(plots_dir, '/t_tests_CTV.pdf'), width = 16, height = 6, units = "cm")
+ggsave(paste0(plots_dir, '/t_tests_CTV.tiff'), width = 16, height = 6, units = "cm", dpi = 150)
 
 
-ggplot(data = filter(dt.stats, struct == 'CTV',
-                     method %in% c("None", "Plan", "Weights")),
-       aes(x = short_const, y = V98, group = interaction(case, need_adapt),
-           fill = need_adapt)) +
-    geom_boxplot() +
-    theme(legend.position = 'bottom') + 
-    labs(y = 'V98 (%)', x = element_blank())
-ggsave(paste0(plots_dir, '/target/','target_V98_weights_need_adapt', '.pdf'),
-       width = 16, height = 8, units = "cm")
+ggplot(data = filter(df.ttest, struct != 'CTV'),
+       aes(x = parameter, y = val,
+           color = stage,
+           shape = stage,
+           group = interaction(link.V, stage))) +
+    geom_rect(xmin = 0, xmax = 9, ymin = 0, ymax = 0.05, fill = 'green', color = NA, alpha = 0.025) +
+    geom_rect(xmin = 0, xmax = 9, ymin = 0.95, ymax = 1, fill = 'red', color = NA, alpha = 0.025) +
+    geom_point() +
+    geom_hline(yintercept = c(0.95, 0.5, 0.05), alpha = 0.6) +
+    geom_line() +
+    scale_y_continuous(limits = c(0, 1), expand = c(0,0)) +
+    facet_grid(struct ~ short_const) +
+    theme(legend.position = 'top',
+          legend.margin = margin(0, 0, 0, 0),
+          legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
+    guides(color = guide_legend(title = "Dose type", nrow = 1), shape = guide_legend(title = "Dose type", nrow = 1)) +
+    labs(y = 'p-value', x = element_blank())
+ggsave(paste0(plots_dir, '/t_tests_OAR.pdf'), width = 16, height = 14, units = "cm")
+ggsave(paste0(plots_dir, '/t_tests_OAR.tiff'), width = 16, height = 13, units = "cm", dpi = 150)
 
-ggplot(data = filter(dt.stats, struct == 'CTV',
-                     method %in% c("Plan", "Weights")),
-       aes(x = short_const, y = D2_D98, group = interaction(case, need_adapt),
-           fill = need_adapt)) +
-    geom_boxplot() +
-    theme(legend.position = 'bottom') + 
-    labs(y = 'D2-D98 [Gy(RBE)]', x = element_blank())
-ggsave(paste0(plots_dir, '/target/','norm_target_D2_D98_weights_need_adapt', '.pdf'),
-       width = 16, height = 8, units = "cm")
+
+
+
+
+
+
+
+
+
+
+
 
 ctv.averages <- dt.stats %>%
     filter(oar == FALSE) %>%

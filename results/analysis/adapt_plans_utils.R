@@ -107,9 +107,9 @@ calculateStats <- function(dvhs_input, prescription, norm_expression)
         group_by(patient, patient.no, pat.week, patient_orig, struct, main_oar, oar, week.no,
                  week.name, case, method, constraint, short_const, scale_norm, stage, checkpoints) %>%
         mutate(dose = scale_norm*dose) %>%
-        summarise(min  = minDose(dose, vol),
-                  max  = maxDose(dose, vol),
-                  mean = meanDose(dose, vol),
+        summarise(min  = 100*minDose(dose, vol)/prescription,
+                  max  = 100*maxDose(dose, vol)/prescription,
+                  mean = 100*meanDose(dose, vol)/prescription,
                   D1   = 100*doseAtVolume(dose, vol, 1)/prescription,
                   D2   = 100*doseAtVolume(dose, vol, 2)/prescription,
                   D5   = 100*doseAtVolume(dose, vol, 5)/prescription,
@@ -130,7 +130,9 @@ calculateStats <- function(dvhs_input, prescription, norm_expression)
                   V115 = volumeAtDose(dose, vol, 115, target_dose),
                   V120 = volumeAtDose(dose, vol, 120, target_dose)
             ) %>%
-        mutate(D5_D95 = D5 - D95, D2_D98 = D2 - D98, D1_D99 = D1 - D99,
+        mutate(D5_D95 = D5 - D95,
+               D2_D98 = D2 - D98,
+               D1_D99 = D1 - D99,
                Dmax_Dmin = max - min) %>%
         mutate(auc = DescTools::AUC(x = c(D2, D5, D50, D95, D98), y = c(2, 5, 50, 95, 98),
                          method = "trapezoid")) %>%
