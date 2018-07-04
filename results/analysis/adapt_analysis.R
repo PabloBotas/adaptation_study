@@ -127,7 +127,7 @@ for (p in levels(dvhs$patient_orig)) {
     ggsave(paste0(plots_dir, '/DVHs_', p, '.pdf'), width = 50, height = 14, units = "cm")
 }
 
-### Patient DVHs: unadapted accu. --------------------------------
+### PAPER Patient DVHs --------------------------------
 p <- c("Patient 4", "Patient 6", "Patient 7", "Patient 8")
 meths <- c('Plan', 'None', 'Weights')
 print(paste('Creating patient', p, 'DVH'))
@@ -154,6 +154,7 @@ plt <- ggplot(temp,
     scale_x_continuous(breaks = seq(0, 100, by = 20)) +
     labs(x = "Dose (%)", y = "Contour volume (%)")
 print(plt)
+ggplotly(plt)
 f <- '/target/plan_evolution/adapted_cumulative_DVHs'
 ggsave(paste0(plots_dir, f, '.pdf'), width = 17, height = 8, units = "cm")
 ggsave(paste0(plots_dir, f, '.tiff'), width = 17, height = 8, units = "cm", dpi = 150)
@@ -807,7 +808,8 @@ weekly_evolution_simple <- function(df, y, outdir, label, label_thres = NA, labe
 weekly_evolution_simple(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
 
 weekly_evolution_comp <- function(df, y, outdir, label, label_thres = NA, label_margin = -100000) {
-    df <- filter(df, struct == 'CTV', method %in% 'None')
+    df <- filter(df, struct == 'CTV', method %in% 'None') %>%
+        mutate(week.name = gsub('Week', 'Scan', week.name))
     
     ## filename
     filestr <- paste0('week.name_', gsub('_plan', '_diff', y))
@@ -844,6 +846,7 @@ weekly_evolution_comp <- function(df, y, outdir, label, label_thres = NA, label_
         ggsave(plot = p, f, width = 13, height = 9, units = "cm", dpi = 600)
     }
 }
+weekly_evolution_comp(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
 
 patient_evolution_box <- function(df, y, color, d, label) {
     df <- filter(df, struct == 'CTV', method %in% 'None', stage %in% c('Cum.', 'Weekly'))
@@ -912,6 +915,7 @@ weekly_evolution_comp(dt.stats, 'D5_D95_plan', plots_dir, expression('D5-D95'[un
 # == V95 =================================================== ===
 weekly_evolution_box(filter(dt.stats, struct == 'CTV', method %in% c('Plan', 'None')),
                   'week.name', 'V95', 'stage', plots_dir, 'V95 (%)')
+### PAPER UNADAPTED ======================
 weekly_evolution_comp(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
 weekly_evolution_simple(dt.stats, 'V95_plan', plots_dir, expression('V95'[unadapt]-'V95'[plan]~~'['*Delta*'%]'), -12.5)
 
@@ -1000,13 +1004,15 @@ paper.res.2 <- dt.stats %>%
     droplevels() %>%
     ungroup()
 
-ggplot(data = mutate(filter(paper.res.2, struct == 'CTV',
-                            method %in% c("Weights"),
-                            !(short_const %in% c("Iso-RS", "RS"))),
-                     stage = factor(stage, levels = c('Cum.', 'Weekly'))),
+ggplot(data = filter(paper.res.2, struct == 'CTV',
+                     method %in% c("Weights"),
+                     !(short_const %in% c("Iso-RS", "RS"))) %>%
+           mutate(stage = as.character(stage)) %>%
+           mutate(stage = gsub("Weekly", "Indiv. scans", stage)) %>%
+               mutate(stage = factor(stage, levels = c('Cum.', 'Indiv. scans'))),
        aes(x = magnitude, y = val, fill = interaction(stage, short_const), group = interaction(magnitude, stage, short_const))) +
     geom_boxplot(outlier.shape = 21) +
-    scale_fill_discrete(labels = c("Free: Cum.", "Free: Weekly", "Iso: Cum.", "Iso: Weekly")) +
+    scale_fill_discrete(labels = c("Free: Cum.", "Free: Indiv. scans", "Iso: Cum.", "Iso: Indiv. scans")) +
     facet_wrap( ~ data.type, scales = 'free') +
     theme(legend.position = 'top',
           legend.margin = margin(0, 0, 0, 0),
@@ -1051,7 +1057,9 @@ paper.res.oars.rel <- dt.stats %>%
     mutate(magnitude = factor(magnitude, levels = c('mean', 'max'))) %>%
     mutate(constraint = factor(constraint, levels = c('Plan', 'None', 'Free', 'Isocenter', 'Range shifter', 'Isocenter - Range shifter'))) %>%
     mutate(short_const = factor(short_const, levels = c('Plan', 'None', 'Free', 'Iso', 'RS', 'Iso-RS'))) %>%
-    mutate(stage = factor(stage, levels = c('Cum.', 'Weekly'))) %>%
+    mutate(stage = as.character(stage)) %>%
+    mutate(stage = gsub("Weekly", "Indiv. scans", stage)) %>%
+    mutate(stage = factor(stage, levels = c('Cum.', 'Indiv. scans'))) %>%
     group_by(stage) %>%
     droplevels() %>%
     ungroup()
@@ -1132,7 +1140,9 @@ df.mode.comp.long <- df.mode.comp %>%
     filter((struct == 'CTV' & parameter != 'mean') |
                (struct != 'CTV' & parameter %in% c('max', 'mean')),
            !(struct %in% c('Esoph. constr.', 'Parotid', 'Oral cavity'))) %>%
-    mutate(stage = factor(stage, levels = c('Cum.', 'Weekly'))) %>%
+    mutate(stage = as.character(stage)) %>%
+    mutate(stage = gsub("Weekly", "Indiv. scans", stage)) %>%
+    mutate(stage = factor(stage, levels = c('Cum.', 'Indiv. scans'))) %>%
     mutate(parameter = factor(parameter, levels = c('V95', 'V98', 'V107', 'V110', 'min', 'D98', 'mean', 'D2', 'max', 'D2_D98', 'D5_D95'))) %>%
     rowwise() %>%
     mutate(link.V = ifelse(parameter %in% c('V95', 'V98', 'V107', 'V110'), 'Volume pars.',
@@ -1169,13 +1179,14 @@ ggplot(data = filter(df.mode.comp.long, link.V == 'Dose pars.'),
            group = interaction(parameter, stage))) +
     geom_hline(yintercept = 0, alpha = 0.5) +
     geom_boxplot() +
-    stat_summary(fun.y = mean, aes(color = stage, group = stage), geom = "point", position = position_jitterdodge(jitter.width = 0), size = 3) +
-    scale_color_brewer(palette = "Set1") +
+    stat_summary(fun.y = mean, aes(color = stage, group = stage, shape = stage), geom = "point", position = position_jitterdodge(jitter.width = 0), size = 3, alpha = 0.85) +
+    scale_shape_manual(values = c(15, 17)) +
     facet_grid(short_const ~ struct, scales = 'free', space = 'free') +
     theme(legend.position = 'top',
           legend.margin = margin(0, 0, 0, 0),
           legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
-    guides(color = guide_legend(title = "Mode - Free dose difference: ", nrow = 1)) +
+    guides(color = guide_legend(title = "Mode - Free dose percentage difference: ", nrow = 1),
+           shape = guide_legend(title = "Mode - Free dose percentage difference: ", nrow = 1)) +
     labs(y = expression("Dose ["*Delta*"%]"), x = element_blank())
 ggsave(paste0(plots_dir, '/mode_comparison.pdf'), width = 16, height = 10, units = "cm")
 ggsave(paste0(plots_dir, '/mode_comparison.tiff'), width = 16, height = 10, units = "cm", dpi = 150)
