@@ -1119,6 +1119,10 @@ my_diff <- function(v) {
     # The free strategy is the first element in the vector
     return(v - v[1])
 }
+my_diff_rel <- function(v) {
+    # The free strategy is the first element in the vector
+    return(100*(v - v[1])/v[1])
+}
 my_ttest <- function(v) {
     if (length(v) == 1) {
         return(NA)
@@ -1132,6 +1136,15 @@ df.mode.comp <- filter(dt.stats, method == 'Weights', struct == 'CTV' | main_oar
     group_by(struct, patient, stage, week.no) %>%
     arrange(struct, patient, stage, week.no) %>%
     mutate_at(.vars = vars(V95:D5_D95), .funs = funs(my_diff)) %>%
+    filter(short_const != 'Free')
+
+df.mode.comp.rel <- filter(dt.stats, method == 'Weights', struct == 'CTV' | main_oar == TRUE) %>%
+    select(struct, stage, patient, short_const, week.no, V95, V98, V107, V110, D98, D2, min, mean, max, D2_D98, D5_D95) %>%
+    mutate(struct = gsub('R. |L. ', '', struct)) %>%
+    mutate(struct = factor(struct)) %>%
+    group_by(struct, patient, stage, week.no) %>%
+    arrange(struct, patient, stage, week.no) %>%
+    mutate_at(.vars = vars(V95:D5_D95), .funs = funs(my_diff_rel)) %>%
     filter(short_const != 'Free')
 
 df.mode.comp.long <- df.mode.comp %>%
@@ -1150,7 +1163,7 @@ df.mode.comp.long <- df.mode.comp %>%
     ungroup() %>%
     mutate(link.V = factor(link.V, levels = c('Volume pars.', 'Dose pars.', 'Homogeneity pars.')))
 
-df.ttest <- df.mode.comp %>%
+df.mode.comp.ttests <- df.mode.comp %>%
     mutate_at(.vars = vars(V107, V110, D2_D98, D5_D95), .funs = (function(v){return(-v)}(.))) %>%
     mutate(D2 = if (struct == 'CTV') -D2 else D2,
            mean = if (struct == 'CTV') -mean else mean,
@@ -1173,8 +1186,17 @@ df.ttest <- df.mode.comp %>%
     ungroup() %>%
     mutate(link.V = factor(link.V, levels = c('Volume pars.', 'Dose pars.', 'Homogeneity pars.')))
 
+df.mode.comp.stats <- df.mode.comp %>%
+    ungroup() %>% group_by(struct, stage, short_const) %>%
+    summarise_at(.vars = vars(V95:D5_D95), .funs = funs(mean, sd))
 
-ggplot(data = filter(df.mode.comp.long, link.V == 'Dose pars.'),
+df.mode.comp.stats.rel <- df.mode.comp.rel %>%
+    ungroup() %>% group_by(struct, stage, short_const) %>%
+    summarise_at(.vars = vars(V95:D5_D95), .funs = funs(mean, sd))
+
+ggplot(data = filter(df.mode.comp.long,
+                     (link.V == 'Dose pars.' & struct != 'CTV') |
+                     (link.V == 'Volume pars.' & struct == 'CTV')),
        aes(x = parameter, y = val,
            group = interaction(parameter, stage))) +
     geom_hline(yintercept = 0, alpha = 0.5) +
@@ -1185,9 +1207,9 @@ ggplot(data = filter(df.mode.comp.long, link.V == 'Dose pars.'),
     theme(legend.position = 'top',
           legend.margin = margin(0, 0, 0, 0),
           legend.box.margin = margin(-5, 0, -10, 0)) + #margin(top, right, bottom, left)
-    guides(color = guide_legend(title = "Mode - Free dose percentage difference: ", nrow = 1),
-           shape = guide_legend(title = "Mode - Free dose percentage difference: ", nrow = 1)) +
-    labs(y = expression("Dose ["*Delta*"%]"), x = element_blank())
+    guides(color = guide_legend(title = "Mode - Free percentage difference: ", nrow = 1),
+           shape = guide_legend(title = "Mode - Free percentage difference: ", nrow = 1)) +
+    labs(y = expression("Volume or Dose ["*Delta*"%]"), x = element_blank())
 ggsave(paste0(plots_dir, '/mode_comparison.pdf'), width = 16, height = 10, units = "cm")
 ggsave(paste0(plots_dir, '/mode_comparison.tiff'), width = 16, height = 10, units = "cm", dpi = 150)
 
